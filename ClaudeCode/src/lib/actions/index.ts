@@ -3,8 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/db/client";
-import { Role } from "@/lib/artifacts/enums";
+import { ArtifactKind, Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
+import { draftArtifact, AssistUnavailableError, type DraftContext } from "@/lib/ai/assist";
+import { getDraftModelClient } from "@/lib/ai/provider";
 import {
   AttributeRegisterBody,
   CharterBody,
@@ -603,6 +605,84 @@ export async function approveGateAction(
     return { ok: true };
   } catch (error) {
     return fail(error);
+  }
+}
+
+/**
+ * Propose-only AI assist (Non-Negotiable 3). Returns a schema-valid draft of an
+ * artifact body for the owner to review and edit — it persists nothing and can
+ * approve nothing. When no LLM is configured it returns `unavailable: true` so
+ * the UI stays fully manual (Non-Negotiable 6), never an error the user must
+ * work around.
+ */
+export type DraftArtifactResult =
+  | { ok: true; draft: unknown }
+  | { ok: false; error: string; unavailable?: boolean };
+
+/** Grounding drawn from upstream stages so a draft stays anchored to real context. */
+async function buildDraftContext(
+  productId: string,
+  workspaceName: string,
+  industryPack: string,
+  productName: string,
+  kind: ArtifactKind,
+): Promise<DraftContext> {
+  const context: DraftContext = { productName, workspaceName, industryPack };
+
+  // A charter's value hypothesis must name a stage-1 decision, so ground it in
+  // the product's recorded decisions (Non-Negotiable 1).
+  if (kind === "CHARTER") {
+    const decisions = await prisma.decisionRecord.findMany({
+      where: { productId, archivedAt: null },
+      orderBy: { createdAt: "asc" },
+    });
+    const complete = decisions.filter(
+      (d) => d.persona.trim() && d.decision.trim() && d.cadence.trim() && d.consequence.trim(),
+    );
+    if (complete.length > 0) {
+      context.groundingNotes = [
+        "Blocked decisions this product must serve:",
+        ...complete.map(
+          (d) =>
+            `- ${d.persona} cannot decide "${d.decision}" (${d.cadence}); consequence: ${d.consequence}`,
+        ),
+      ].join("\n");
+    }
+  }
+
+  return context;
+}
+
+export async function draftArtifactAction(
+  productId: string,
+  kind: string,
+): Promise<DraftArtifactResult> {
+  try {
+    const artifactKind = ArtifactKind.parse(kind);
+    await requireMembership(productId);
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: { workspace: true },
+    });
+
+    const context = await buildDraftContext(
+      productId,
+      product.workspace.name,
+      product.workspace.industryPack,
+      product.name,
+      artifactKind,
+    );
+
+    // Client is built per-call from the environment; null means assist is off.
+    const draft = await draftArtifact(artifactKind, context, getDraftModelClient());
+    return { ok: true, draft };
+  } catch (error) {
+    if (error instanceof AssistUnavailableError) {
+      return { ok: false, error: error.message, unavailable: true };
+    }
+    const r = fail(error);
+    return { ok: false, error: r.ok ? "" : r.error };
   }
 }
 

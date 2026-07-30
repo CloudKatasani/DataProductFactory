@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { commitAttributeRegisterAction } from "@/lib/actions";
+import { AiDraftButton, AiDraftBanner } from "@/components/ai-draft";
 
 /**
  * Stage-5 authoring: the attribute register. Sensitivity offers "Unclassified"
@@ -32,7 +33,34 @@ export function AttributeRegisterEditor({ productId }: { productId: string }) {
   const [rows, setRows] = useState<Row[]>([{ ...EMPTY }]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [aiDrafted, setAiDrafted] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{
+      attributes: Array<{
+        name: string;
+        dataType: string;
+        sensitivity: string | null;
+        piiFlag: boolean;
+        regulatoryFlags: string;
+      }>;
+    }>;
+    if (d.attributes?.length) {
+      setRows(
+        d.attributes.map((a) => ({
+          name: a.name ?? "",
+          dataType: a.dataType ?? "",
+          // Null sensitivity means "unclassified" — the human steward decides.
+          sensitivity: a.sensitivity ?? "",
+          piiFlag: a.piiFlag ?? false,
+          regulatoryFlags: a.regulatoryFlags ?? "",
+        })),
+      );
+    }
+    setDone(false);
+    setAiDrafted(true);
+  }
 
   const valid = rows.filter((r) => r.name.trim() && r.dataType.trim());
   const unclassified = valid.filter((r) => r.sensitivity === "").length;
@@ -60,7 +88,12 @@ export function AttributeRegisterEditor({ productId }: { productId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4">
+    <div
+      className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4"
+      onChange={() => aiDrafted && setAiDrafted(false)}
+    >
+      <AiDraftButton productId={productId} kind="ATTRIBUTE_REGISTER" onDraft={applyDraft} />
+      {aiDrafted && <AiDraftBanner />}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Attributes</span>
         <button

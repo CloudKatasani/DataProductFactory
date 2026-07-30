@@ -1,8 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Trash2 } from "lucide-react";
+import { Check, Sparkles, Trash2, X } from "lucide-react";
 import { addDecisionRecordAction, archiveDecisionRecordAction } from "@/lib/actions";
+import { AiDraftButton } from "@/components/ai-draft";
+import { ProvenanceBadge } from "@/components/badges";
 
 /**
  * Stage-1 authoring: the blocked-decision register. Non-Negotiable 1 lives here
@@ -21,6 +23,13 @@ export interface DecisionRow {
 
 const EMPTY = { persona: "", decision: "", cadence: "", consequence: "" };
 
+interface ProposedDecision {
+  persona: string;
+  decision: string;
+  cadence: string;
+  consequence: string;
+}
+
 export function DecisionRecordsEditor({
   productId,
   records,
@@ -30,7 +39,25 @@ export function DecisionRecordsEditor({
 }) {
   const [fields, setFields] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
+  const [proposed, setProposed] = useState<ProposedDecision[]>([]);
   const [pending, startTransition] = useTransition();
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{ decisions: ProposedDecision[] }>;
+    // Propose-only: the agent's decisions land in a review list, not the DB.
+    // A human adds the ones they want (Non-Negotiable 3).
+    if (d.decisions?.length) setProposed(d.decisions);
+  }
+
+  function addProposed(index: number) {
+    const item = proposed[index];
+    if (!item) return;
+    startTransition(async () => {
+      const result = await addDecisionRecordAction(productId, item);
+      if (result.ok) setProposed((p) => p.filter((_, j) => j !== index));
+      else setError(result.error);
+    });
+  }
 
   const canAdd =
     fields.persona.trim() &&
@@ -49,6 +76,61 @@ export function DecisionRecordsEditor({
 
   return (
     <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-3">
+        <AiDraftButton
+          productId={productId}
+          kind="DECISION_REGISTER"
+          onDraft={applyDraft}
+          label="Propose decisions with agent"
+        />
+        {proposed.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-md border border-violet-500/40 bg-violet-500/5 p-3">
+            <div className="flex items-center gap-2 text-xs text-violet-700 dark:text-violet-300">
+              <Sparkles size={14} aria-hidden />
+              <ProvenanceBadge provenance="AI_DRAFT" />
+              <span className="font-medium">
+                Agent-proposed decisions — add the ones that hold up
+              </span>
+            </div>
+            <ul className="flex flex-col gap-2">
+              {proposed.map((p, i) => (
+                <li
+                  key={i}
+                  className="flex items-start justify-between gap-3 rounded-md border border-[var(--border)] bg-background p-3 text-sm"
+                >
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium">{p.persona}</span>
+                    <span>{p.decision}</span>
+                    <span className="text-xs text-[var(--muted)]">
+                      Cadence: {p.cadence} · Consequence: {p.consequence}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      type="button"
+                      aria-label={`Add proposed decision ${i + 1}`}
+                      disabled={pending}
+                      onClick={() => addProposed(i)}
+                      className="rounded-md border border-transparent p-1.5 text-emerald-600 transition hover:border-emerald-500/40 disabled:opacity-50 dark:text-emerald-400"
+                    >
+                      <Check size={16} aria-hidden />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Dismiss proposed decision ${i + 1}`}
+                      onClick={() => setProposed((prev) => prev.filter((_, j) => j !== i))}
+                      className="rounded-md border border-transparent p-1.5 text-[var(--muted)] transition hover:border-rose-500/40 hover:text-rose-600"
+                    >
+                      <X size={16} aria-hidden />
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
       <ul className="flex flex-col gap-2">
         {records.length === 0 && (
           <li className="rounded-md border border-dashed border-[var(--border)] p-4 text-sm text-[var(--muted)]">

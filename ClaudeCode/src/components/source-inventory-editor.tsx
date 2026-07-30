@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { commitSourceInventoryAction } from "@/lib/actions";
+import { AiDraftButton, AiDraftBanner } from "@/components/ai-draft";
 
 /**
  * Stage-3 authoring: the source inventory. Each source is captured as supporting
@@ -34,10 +35,19 @@ export function SourceInventoryEditor({ productId }: { productId: string }) {
   const [gapLog, setGapLog] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [aiDrafted, setAiDrafted] = useState(false);
   const [pending, startTransition] = useTransition();
 
   const valid = rows.filter((r) => r.name.trim() && r.system.trim() && r.description.trim());
   const canCommit = valid.length > 0;
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{ sources: SourceRow[]; gapLog: string }>;
+    if (d.sources?.length) setRows(d.sources.map((s) => ({ ...EMPTY_ROW, ...s })));
+    if (typeof d.gapLog === "string") setGapLog(d.gapLog);
+    setDone(false);
+    setAiDrafted(true);
+  }
 
   function update(i: number, patch: Partial<SourceRow>) {
     setRows((prev) => prev.map((r, j) => (j === i ? { ...r, ...patch } : r)));
@@ -57,7 +67,12 @@ export function SourceInventoryEditor({ productId }: { productId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4">
+    <div
+      className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4"
+      onChange={() => aiDrafted && setAiDrafted(false)}
+    >
+      <AiDraftButton productId={productId} kind="SOURCE_INVENTORY" onDraft={applyDraft} />
+      {aiDrafted && <AiDraftBanner />}
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Sources</span>
         <button
