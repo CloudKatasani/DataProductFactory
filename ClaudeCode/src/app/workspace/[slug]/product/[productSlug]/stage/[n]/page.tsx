@@ -5,6 +5,7 @@ import { AppHeader } from "@/components/app-header";
 import { GateStatusBadge, ProvenanceBadge } from "@/components/badges";
 import { ActionButton } from "@/components/action-button";
 import { DecisionRecordsEditor } from "@/components/decision-records-editor";
+import { CharterEditor } from "@/components/charter-editor";
 import { getCurrentUser, rolesInWorkspace } from "@/lib/auth/session";
 import { getProductView } from "@/lib/queries";
 import {
@@ -110,6 +111,46 @@ export default async function StagePage({
                 )}
               </div>
             )}
+          </section>
+        )}
+
+        {/* Stage-2 authoring. */}
+        {stage.number === 2 && isMember && (
+          <section className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Product charter
+            </h2>
+            <div className="mt-3">
+              <CharterEditor
+                productId={view.product.id}
+                defaultName={view.product.name}
+                defaultArchetype={view.product.archetype}
+                defaultTier={view.product.tier}
+              />
+            </div>
+            {PRE_REVIEW.has(stage.status) && (
+              <div className="mt-4">
+                <ActionButton
+                  action={enterReviewAction.bind(null, view.product.id, stage.number)}
+                  variant="primary"
+                >
+                  Submit for review
+                </ActionButton>
+              </div>
+            )}
+          </section>
+        )}
+
+        {/* Stages whose authoring UI is not built yet — the gate is still live. */}
+        {isMember && stage.number > 2 && (
+          <section className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Author
+            </h2>
+            <p className="mt-2 max-w-prose text-sm text-[var(--muted)]">
+              The authoring UI for this stage arrives in a later slice. Its gate, exit criteria
+              and approval flow above are already active.
+            </p>
           </section>
         )}
 

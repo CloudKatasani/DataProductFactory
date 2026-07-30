@@ -5,7 +5,7 @@ import { ZodError } from "zod";
 import { prisma } from "@/lib/db/client";
 import { Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
-import { parseArtifactBody } from "@/lib/artifacts/schemas";
+import { CharterBody, parseArtifactBody, renderCharterMarkdown } from "@/lib/artifacts/schemas";
 import { approveGate, recordReviewDecision, setGateStatus } from "@/lib/governance/gates";
 import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
@@ -150,6 +150,54 @@ export async function commitDecisionRegisterAction(
     });
 
     revalidatePath(`${productPath(ctx)}/stage/1`);
+    revalidatePath(productPath(ctx));
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Stage 2. Validate the charter's structured shape, render it to Markdown, and
+ * commit it as the CHARTER artifact (Non-Negotiable 7 mirrors the .md). The
+ * product's archetype and tier are set from the charter — they are null until a
+ * charter exists, by design.
+ */
+export async function commitCharterAction(
+  productId: string,
+  input: {
+    productName: string;
+    archetype: string;
+    tier: string;
+    scopeBoundary: string;
+    valueHypothesis: string;
+    successMeasures: Array<{ measure: string; target: string }>;
+  },
+): Promise<ActionResult> {
+  try {
+    const { user, ctx } = await requireMembership(productId);
+    const body = CharterBody.parse(input);
+
+    await commitArtifact({
+      workspaceId: ctx.workspaceId,
+      workspaceSlug: ctx.workspaceSlug,
+      productId: ctx.productId,
+      productSlug: ctx.productSlug,
+      stageNumber: 2,
+      kind: "CHARTER",
+      slug: "charter",
+      format: "markdown",
+      body: renderCharterMarkdown(body),
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    await prisma.product.update({
+      where: { id: productId },
+      data: { archetype: body.archetype, tier: body.tier },
+    });
+
+    revalidatePath(`${productPath(ctx)}/stage/2`);
     revalidatePath(productPath(ctx));
     return { ok: true };
   } catch (error) {

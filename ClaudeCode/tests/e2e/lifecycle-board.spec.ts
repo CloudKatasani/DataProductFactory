@@ -14,6 +14,7 @@ import { expect, test, type Page } from "@playwright/test";
 
 const PASSWORD = "dpf-local-dev";
 const STAGE1 = "/workspace/demo/product/outage-response/stage/1";
+const STAGE2 = "/workspace/demo/product/outage-response/stage/2";
 const BOARD = "/workspace/demo/product/outage-response";
 
 async function signIn(page: Page, email: string) {
@@ -78,6 +79,39 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
   // Stage 2 is now unlocked on the board (stage 1 had locked it before).
   await page.goto(BOARD);
   await expect(page.locator('a[href$="/stage/2"]')).toBeVisible();
+
+  // --- Stage 2: author the charter (consumer is a member), then two required
+  // approvers — product owner and domain architect — close its gate. ---
+  await page.goto(STAGE2);
+  await page
+    .getByLabel("Scope boundary (what is in and out)")
+    .fill("In: active outage dispatch. Out: billing.");
+  await page
+    .getByLabel("Value hypothesis (the consumer decision this unblocks)")
+    .fill("Unblocks the dispatch supervisor's crew-priority decision.");
+  await page.getByLabel("Measure 1", { exact: true }).fill("Mean time to dispatch");
+  await page.getByLabel("Target 1", { exact: true }).fill("< 10 min");
+  await page.getByRole("button", { name: "Commit charter" }).click();
+  await expect(page.getByText("Charter committed", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  // Product owner approves — the domain architect is still required.
+  await signIn(page, "owner@dpf.local");
+  await page.goto(STAGE2);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  // Domain architect completes quorum: stage 2 closes and stage 3 unlocks.
+  await signIn(page, "architect@dpf.local");
+  await page.goto(STAGE2);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Approved")).toBeVisible();
+
+  await page.goto(BOARD);
+  await expect(page.locator('a[href$="/stage/3"]')).toBeVisible();
 });
 
 test("a locked downstream stage has no navigable link", async ({ page }) => {
