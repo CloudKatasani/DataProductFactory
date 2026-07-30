@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DecisionRegisterBody,
   CharterBody,
+  SourceInventoryBody,
   renderCharterMarkdown,
   getArtifactSchema,
   hasArtifactSchema,
@@ -69,6 +70,35 @@ describe("CHARTER body schema", () => {
     expect(md).toContain("| Mean time to dispatch | < 10 min |");
     // Deterministic: same input, same output.
     expect(renderCharterMarkdown(CharterBody.parse(charter))).toBe(md);
+  });
+});
+
+describe("SOURCE_INVENTORY body schema", () => {
+  const source = {
+    name: "Outage events",
+    system: "SCADA",
+    connectionKind: "DATABASE" as const,
+    description: "One row per outage event.",
+    feasibility: "READY" as const,
+  };
+
+  it("requires at least one source", () => {
+    expect(SourceInventoryBody.safeParse({ sources: [] }).success).toBe(false);
+  });
+
+  it("rejects an invalid connection kind or feasibility", () => {
+    expect(
+      SourceInventoryBody.safeParse({ sources: [{ ...source, connectionKind: "SMOKE" }] }).success,
+    ).toBe(false);
+    expect(
+      SourceInventoryBody.safeParse({ sources: [{ ...source, feasibility: "MAYBE" }] }).success,
+    ).toBe(false);
+  });
+
+  it("accepts a valid source and defaults the gap log", () => {
+    const parsed = SourceInventoryBody.parse({ sources: [source] });
+    expect(parsed.sources).toHaveLength(1);
+    expect(parsed.gapLog).toBe("");
   });
 });
 

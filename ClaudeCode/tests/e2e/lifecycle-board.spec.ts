@@ -15,6 +15,7 @@ import { expect, test, type Page } from "@playwright/test";
 const PASSWORD = "dpf-local-dev";
 const STAGE1 = "/workspace/demo/product/outage-response/stage/1";
 const STAGE2 = "/workspace/demo/product/outage-response/stage/2";
+const STAGE3 = "/workspace/demo/product/outage-response/stage/3";
 const BOARD = "/workspace/demo/product/outage-response";
 
 async function signIn(page: Page, email: string) {
@@ -124,6 +125,34 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
 
   await page.goto(BOARD);
   await expect(page.locator('a[href$="/stage/3"]')).toBeVisible();
+
+  // --- Stage 3: author the source inventory (architect is a member), then the
+  // platform engineer and domain SME close its gate; stage 4 unlocks. ---
+  await page.goto(STAGE3);
+  await page.getByLabel("Source 1 name").fill("Outage events");
+  await page.getByLabel("Source 1 system").fill("SCADA");
+  await page
+    .getByLabel("Source 1 description")
+    .fill("One row per outage event, detection to restoration.");
+  await page.getByRole("button", { name: "Commit source inventory" }).click();
+  await expect(page.getByText("Source inventory committed", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "engineer@dpf.local");
+  await page.goto(STAGE3);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "sme@dpf.local");
+  await page.goto(STAGE3);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Approved")).toBeVisible();
+
+  await page.goto(BOARD);
+  await expect(page.locator('a[href$="/stage/4"]')).toBeVisible();
 });
 
 test("a platform admin creates a product and approves its stage-0 setup", async ({ page }) => {

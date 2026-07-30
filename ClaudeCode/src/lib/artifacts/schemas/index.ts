@@ -4,6 +4,7 @@ import type { MirrorFormat } from "@/lib/artifacts/mirror";
 import { WorkspaceSetupBody } from "./workspace-setup";
 import { DecisionRegisterBody } from "./decision-register";
 import { CharterBody } from "./charter";
+import { SourceInventoryBody } from "./source-inventory";
 
 /**
  * The artifact schema registry. `commitArtifact` trusts its caller to have
@@ -39,6 +40,11 @@ const REGISTRY: Partial<Record<ArtifactKind, ArtifactSchemaEntry>> = {
     format: "markdown",
     slug: "charter",
   },
+  SOURCE_INVENTORY: {
+    schema: SourceInventoryBody,
+    format: "yaml",
+    slug: "source-inventory",
+  },
 };
 
 export class UnknownArtifactSchemaError extends Error {
@@ -72,3 +78,4 @@ export function parseArtifactBody(kind: ArtifactKind, body: unknown): unknown {
 export { WorkspaceSetupBody } from "./workspace-setup";
 export { DecisionRegisterBody } from "./decision-register";
 export { CharterBody, renderCharterMarkdown } from "./charter";
+export { SourceInventoryBody } from "./source-inventory";

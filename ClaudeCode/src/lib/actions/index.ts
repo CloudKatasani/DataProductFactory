@@ -5,7 +5,12 @@ import { ZodError } from "zod";
 import { prisma } from "@/lib/db/client";
 import { Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
-import { CharterBody, parseArtifactBody, renderCharterMarkdown } from "@/lib/artifacts/schemas";
+import {
+  CharterBody,
+  SourceInventoryBody,
+  parseArtifactBody,
+  renderCharterMarkdown,
+} from "@/lib/artifacts/schemas";
 import { approveGate, recordReviewDecision, setGateStatus } from "@/lib/governance/gates";
 import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
@@ -314,6 +319,37 @@ export async function commitCharterAction(
     });
 
     revalidatePath(`${productPath(ctx)}/stage/2`);
+    revalidatePath(productPath(ctx));
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Stage 3. Validate and commit the source-inventory.yaml. */
+export async function commitSourceInventoryAction(
+  productId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const { user, ctx } = await requireMembership(productId);
+    const body = SourceInventoryBody.parse(input);
+
+    await commitArtifact({
+      workspaceId: ctx.workspaceId,
+      workspaceSlug: ctx.workspaceSlug,
+      productId: ctx.productId,
+      productSlug: ctx.productSlug,
+      stageNumber: 3,
+      kind: "SOURCE_INVENTORY",
+      slug: "source-inventory",
+      format: "yaml",
+      body,
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    revalidatePath(`${productPath(ctx)}/stage/3`);
     revalidatePath(productPath(ctx));
     return { ok: true };
   } catch (error) {
