@@ -61,6 +61,18 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
     page.getByText("DECISION_REGISTER committed at version", { exact: false }),
   ).toBeVisible();
 
+  // The committed artifact is downloadable; the export route returns YAML and
+  // authorizes server-side (the signed-in cookie is what makes this 200).
+  const yamlHref = await page
+    .locator('a[href^="/api/export/"][href*="yaml"]')
+    .first()
+    .getAttribute("href");
+  expect(yamlHref).toBeTruthy();
+  const download = await page.request.get(yamlHref!);
+  expect(download.status()).toBe(200);
+  expect(download.headers()["content-type"]).toContain("yaml");
+  expect(await download.text()).toContain("Regional dispatch supervisor");
+
   // Submit for review.
   await page.getByRole("button", { name: "Submit for review" }).click();
   await expect(page.getByText("In review")).toBeVisible();

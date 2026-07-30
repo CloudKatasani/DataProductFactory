@@ -22,6 +22,7 @@ export interface StageView {
   ready: boolean;
   criteria: CriterionResult[];
   artifacts: Array<{
+    versionId: string;
     kind: ArtifactKind;
     slug: string;
     versionNumber: number;
@@ -125,7 +126,7 @@ export async function getProductView(
         versions: {
           orderBy: { versionNumber: "desc" },
           take: 1,
-          select: { versionNumber: true, provenance: true },
+          select: { id: true, versionNumber: true, provenance: true },
         },
       },
     }),
@@ -155,6 +156,7 @@ export async function getProductView(
       artifacts: artifacts
         .filter((a) => a.stageNumber === stage.number && a.versions.length > 0)
         .map((a) => ({
+          versionId: a.versions[0]!.id,
           kind: a.kind as ArtifactKind,
           slug: a.slug,
           versionNumber: a.versions[0]!.versionNumber,

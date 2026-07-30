@@ -20,6 +20,9 @@ export default defineConfig({
   workers: 1,
   // The gate flow signs several reviewers in and out across two stages.
   timeout: 120_000,
+  // The dev server compiles routes on first hit; give assertions room for that
+  // cold-start latency instead of the 5s default.
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: process.env.CI ? "github" : "list",
