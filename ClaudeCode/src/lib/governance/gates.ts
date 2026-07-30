@@ -159,3 +159,80 @@ export async function approveGate(
 
   return { gateClosed: true, missingRoles: [], vetoedBy: [] };
 }
+
+export interface RecordReviewDecisionInput {
+  gateId: string;
+  actorId: string;
+  actorRole: Role;
+  workspaceId: string;
+  workspaceSlug: string;
+  productId: string;
+  /** REJECT or REQUEST_CHANGES. APPROVE must go through approveGate. */
+  decision: "REJECT" | "REQUEST_CHANGES";
+  currentArtifactHash: string;
+  artifactVersionId: string;
+  comment?: string;
+}
+
+/**
+ * Record a reviewer's non-approving decision. This lives in the same file as
+ * approveGate on purpose: it is the only *other* thing that mutates a gate, and
+ * keeping both here is what lets the choke-point test assert "one file mutates
+ * gates". It never writes APPROVED — a rejection or change request moves the
+ * gate to CHANGES_REQUESTED — so it cannot be a back door to approval.
+ *
+ * The approval row is append-only like every other: changing your mind later is
+ * a new row, and quorum reads most-recent-wins.
+ */
+export async function recordReviewDecision(
+  tx: Prisma.TransactionClient,
+  input: RecordReviewDecisionInput,
+): Promise<void> {
+  const held = await tx.roleAssignment.findFirst({
+    where: { userId: input.actorId, workspaceId: input.workspaceId, role: input.actorRole },
+  });
+  if (!held) {
+    throw roleNotHeld(input.actorRole, input.workspaceSlug);
+  }
+
+  const gate = await tx.gate.findUniqueOrThrow({ where: { id: input.gateId } });
+
+  await tx.approval.create({
+    data: {
+      gateId: input.gateId,
+      artifactVersionId: input.artifactVersionId,
+      actorId: input.actorId,
+      role: input.actorRole,
+      decision: input.decision,
+      artifactHash: input.currentArtifactHash,
+      comment: input.comment ?? null,
+    },
+  });
+
+  await tx.gate.update({
+    where: { id: input.gateId },
+    data: { status: "CHANGES_REQUESTED" },
+  });
+
+  await recordAudit(tx, {
+    workspaceId: input.workspaceId,
+    productId: input.productId,
+    actorId: input.actorId,
+    type: "APPROVAL_RECORDED",
+    payload: {
+      gateId: input.gateId,
+      stageNumber: gate.stageNumber,
+      role: input.actorRole,
+      decision: input.decision,
+      artifactHash: input.currentArtifactHash,
+    },
+  });
+
+  await recordAudit(tx, {
+    workspaceId: input.workspaceId,
+    productId: input.productId,
+    actorId: input.actorId,
+    type: "GATE_STATUS_CHANGED",
+    payload: { gateId: input.gateId, stageNumber: gate.stageNumber, to: "CHANGES_REQUESTED" },
+  });
+}
