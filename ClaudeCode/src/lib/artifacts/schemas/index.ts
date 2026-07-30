@@ -6,6 +6,8 @@ import { DecisionRegisterBody } from "./decision-register";
 import { CharterBody } from "./charter";
 import { SourceInventoryBody } from "./source-inventory";
 import { LogicalModelBody } from "./logical-model";
+import { AttributeRegisterBody } from "./attribute-register";
+import { DataContractBody } from "./data-contract";
 
 /**
  * The artifact schema registry. `commitArtifact` trusts its caller to have
@@ -51,6 +53,16 @@ const REGISTRY: Partial<Record<ArtifactKind, ArtifactSchemaEntry>> = {
     format: "yaml",
     slug: "logical-model",
   },
+  ATTRIBUTE_REGISTER: {
+    schema: AttributeRegisterBody,
+    format: "yaml",
+    slug: "attribute-register",
+  },
+  DATA_CONTRACT: {
+    schema: DataContractBody,
+    format: "yaml",
+    slug: "data-contract",
+  },
 };
 
 export class UnknownArtifactSchemaError extends Error {
@@ -86,3 +98,5 @@ export { DecisionRegisterBody } from "./decision-register";
 export { CharterBody, renderCharterMarkdown } from "./charter";
 export { SourceInventoryBody } from "./source-inventory";
 export { LogicalModelBody } from "./logical-model";
+export { AttributeRegisterBody } from "./attribute-register";
+export { DataContractBody } from "./data-contract";

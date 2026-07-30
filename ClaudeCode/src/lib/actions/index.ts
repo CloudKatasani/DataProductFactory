@@ -6,12 +6,15 @@ import { prisma } from "@/lib/db/client";
 import { Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
 import {
+  AttributeRegisterBody,
   CharterBody,
+  DataContractBody,
   LogicalModelBody,
   SourceInventoryBody,
   parseArtifactBody,
   renderCharterMarkdown,
 } from "@/lib/artifacts/schemas";
+import { syncAttributes } from "@/lib/artifacts/attributes";
 import { approveGate, recordReviewDecision, setGateStatus } from "@/lib/governance/gates";
 import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
@@ -441,6 +444,74 @@ export async function commitLogicalModelAction(
     });
 
     revalidatePath(`${productPath(ctx)}/stage/4`);
+    revalidatePath(productPath(ctx));
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Stage 5a. Commit the attribute register and project it into the Attribute
+ * table (Non-Negotiable 10 — those rows are what the Stage 9 classification
+ * criterion counts).
+ */
+export async function commitAttributeRegisterAction(
+  productId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const { user, ctx } = await requireMembership(productId);
+    const body = AttributeRegisterBody.parse(input);
+
+    await commitArtifact({
+      workspaceId: ctx.workspaceId,
+      workspaceSlug: ctx.workspaceSlug,
+      productId: ctx.productId,
+      productSlug: ctx.productSlug,
+      stageNumber: 5,
+      kind: "ATTRIBUTE_REGISTER",
+      slug: "attribute-register",
+      format: "yaml",
+      body,
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    await prisma.$transaction((tx) => syncAttributes(tx, ctx.productId, body.attributes));
+
+    revalidatePath(`${productPath(ctx)}/stage/5`);
+    revalidatePath(productPath(ctx));
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Stage 5b. Validate and commit the data-contract.yaml. */
+export async function commitDataContractAction(
+  productId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const { user, ctx } = await requireMembership(productId);
+    const body = DataContractBody.parse(input);
+
+    await commitArtifact({
+      workspaceId: ctx.workspaceId,
+      workspaceSlug: ctx.workspaceSlug,
+      productId: ctx.productId,
+      productSlug: ctx.productSlug,
+      stageNumber: 5,
+      kind: "DATA_CONTRACT",
+      slug: "data-contract",
+      format: "yaml",
+      body,
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    revalidatePath(`${productPath(ctx)}/stage/5`);
     revalidatePath(productPath(ctx));
     return { ok: true };
   } catch (error) {
