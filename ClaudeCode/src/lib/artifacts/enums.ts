@@ -34,6 +34,16 @@ export const GateStatus = z.enum([
 ]);
 export type GateStatus = z.infer<typeof GateStatus>;
 
+/**
+ * How a gate reaches APPROVED. MANUAL is the default — a human approver clicks
+ * approve. AUTOMATED auto-approves the moment exit criteria pass, but only ever
+ * on behalf of a human who holds every required role and enabled it, and never
+ * for a gate carrying a veto role. Both modes reach APPROVED through the single
+ * approveGate choke point (Non-Negotiable 2).
+ */
+export const GateMode = z.enum(["MANUAL", "AUTOMATED"]);
+export type GateMode = z.infer<typeof GateMode>;
+
 export const ApprovalDecision = z.enum(["APPROVE", "REJECT", "REQUEST_CHANGES"]);
 export type ApprovalDecision = z.infer<typeof ApprovalDecision>;
 
@@ -71,6 +81,7 @@ export type ArtifactKind = z.infer<typeof ArtifactKind>;
 export const AuditEventType = z.enum([
   "ARTIFACT_VERSION_COMMITTED",
   "GATE_STATUS_CHANGED",
+  "GATE_MODE_CHANGED",
   "APPROVAL_RECORDED",
   "CASCADE_INVALIDATED",
   "PRODUCT_CREATED",

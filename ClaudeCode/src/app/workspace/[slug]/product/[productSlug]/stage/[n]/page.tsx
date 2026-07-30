@@ -10,6 +10,7 @@ import { SourceInventoryEditor } from "@/components/source-inventory-editor";
 import { LogicalModelEditor } from "@/components/logical-model-editor";
 import { AttributeRegisterEditor } from "@/components/attribute-register-editor";
 import { DataContractEditor } from "@/components/data-contract-editor";
+import { GateModeControl } from "@/components/gate-mode-control";
 import { getCurrentUser, rolesInWorkspace } from "@/lib/auth/session";
 import { getProductView } from "@/lib/queries";
 import {
@@ -43,6 +44,11 @@ export default async function StagePage({
   const myRoles = await rolesInWorkspace(user.id, view.workspace.id);
   const isMember = myRoles.length > 0;
   const myApproverRoles = stage.requiredApprovers.filter((r) => myRoles.includes(r));
+  // Automating a gate is a standing pre-approval, so it takes holding *every*
+  // required approver role — the same bar the server enforces.
+  const holdsAllApproverRoles =
+    stage.requiredApprovers.length > 0 &&
+    stage.requiredApprovers.every((r) => myRoles.includes(r));
 
   return (
     <>
@@ -286,6 +292,18 @@ export default async function StagePage({
               </span>
             ))}
           </div>
+
+          {stage.gateId && isMember && (
+            <div className="mt-4">
+              <GateModeControl
+                gateId={stage.gateId}
+                mode={stage.mode}
+                automatable={stage.automatable}
+                automationByName={stage.automationByName}
+                canToggle={holdsAllApproverRoles}
+              />
+            </div>
+          )}
 
           {stage.gateId && REVIEWABLE.has(stage.status) && myApproverRoles.length > 0 ? (
             <div className="mt-4 flex flex-col gap-4">

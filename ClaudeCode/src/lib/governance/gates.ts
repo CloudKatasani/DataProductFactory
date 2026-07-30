@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
-import { GateStatus, type Role } from "@/lib/artifacts/enums";
-import { getStage } from "@/lib/lifecycle/stages";
+import { GateMode, GateStatus, type Role } from "@/lib/artifacts/enums";
+import { getStage, stageAllowsAutomation } from "@/lib/lifecycle/stages";
 import { recordAudit } from "./audit";
 import { GovernanceError, roleNotHeld } from "./errors";
 import { evaluateQuorum, type ApprovalRecord } from "./quorum";
@@ -158,6 +158,162 @@ export async function approveGate(
   });
 
   return { gateClosed: true, missingRoles: [], vetoedBy: [] };
+}
+
+export interface SetGateModeInput {
+  gateId: string;
+  mode: GateMode;
+  /** Authenticated user id enabling/disabling automation. */
+  actorId: string;
+  workspaceId: string;
+  workspaceSlug: string;
+  productId: string;
+}
+
+/**
+ * Set a gate's approval mode. Lives here because it mutates a Gate row and must
+ * stay inside the one file the choke-point test allows to do so — but note it
+ * only ever writes `mode`, never `status`, so it is not a path to APPROVED.
+ *
+ * Enabling AUTOMATED is a governed act: the gate must not carry a veto role, and
+ * the actor must hold *every* required approver role. Automation is a standing
+ * pre-approval, so the human enabling it must be authorized to fill every seat
+ * it will later fill on their behalf (Non-Negotiable 2).
+ */
+export async function setGateMode(
+  tx: Prisma.TransactionClient,
+  input: SetGateModeInput,
+): Promise<void> {
+  GateMode.parse(input.mode);
+  const gate = await tx.gate.findUniqueOrThrow({ where: { id: input.gateId } });
+  const stage = getStage(gate.stageNumber);
+
+  if (input.mode === "AUTOMATED") {
+    if (!stageAllowsAutomation(gate.stageNumber)) {
+      throw new GovernanceError(
+        `Stage ${gate.stageNumber} carries a veto role and can never be automated — it always requires a human approver.`,
+        "NOT_AUTHORIZED",
+      );
+    }
+    const held = await tx.roleAssignment.findMany({
+      where: {
+        userId: input.actorId,
+        workspaceId: input.workspaceId,
+        role: { in: [...stage.requiredApprovers] },
+      },
+      select: { role: true },
+    });
+    const heldRoles = new Set(held.map((h) => h.role));
+    const missing = stage.requiredApprovers.filter((r) => !heldRoles.has(r));
+    if (missing.length > 0) {
+      throw new GovernanceError(
+        `You can only automate this gate if you hold every required approver role. You are missing: ${missing.join(", ")}.`,
+        "NOT_AUTHORIZED",
+      );
+    }
+  }
+
+  await tx.gate.update({
+    where: { id: input.gateId },
+    data: {
+      mode: input.mode,
+      automationById: input.mode === "AUTOMATED" ? input.actorId : null,
+      automationAt: input.mode === "AUTOMATED" ? new Date() : null,
+    },
+  });
+
+  await recordAudit(tx, {
+    workspaceId: input.workspaceId,
+    productId: input.productId,
+    actorId: input.actorId,
+    type: "GATE_MODE_CHANGED",
+    payload: { gateId: input.gateId, stageNumber: gate.stageNumber, mode: input.mode },
+  });
+}
+
+export interface AutoApproveGateInput {
+  gateId: string;
+  workspaceId: string;
+  workspaceSlug: string;
+  productId: string;
+  currentArtifactHash: string;
+  artifactVersionId: string;
+}
+
+export interface AutoApproveResult {
+  gateClosed: boolean;
+  /** True when the gate was AUTOMATED and eligible and the path ran. */
+  attempted: boolean;
+  /** Why it did not run, when attempted is false. */
+  reason?: string;
+}
+
+/**
+ * The automated approval path. It does NOT write APPROVED itself: it fills each
+ * required seat by calling `approveGate` on behalf of the human who enabled
+ * automation, so the single choke point still writes the one and only APPROVED
+ * (Non-Negotiable 2 holds — "exactly one code path" is literally still true).
+ *
+ * It is deliberately conservative: it no-ops (rather than throwing) whenever the
+ * gate is not AUTOMATED, is a veto gate, or the enabling human no longer holds
+ * every required role. In those cases the gate is simply left for manual review.
+ */
+export async function autoApproveGate(
+  tx: Prisma.TransactionClient,
+  input: AutoApproveGateInput,
+): Promise<AutoApproveResult> {
+  const gate = await tx.gate.findUniqueOrThrow({ where: { id: input.gateId } });
+  if (gate.mode !== "AUTOMATED" || !gate.automationById) {
+    return { gateClosed: false, attempted: false, reason: "gate is not automated" };
+  }
+  if (!stageAllowsAutomation(gate.stageNumber)) {
+    return { gateClosed: false, attempted: false, reason: "veto gate cannot be automated" };
+  }
+
+  const stage = getStage(gate.stageNumber);
+  const enablerId = gate.automationById;
+
+  // Re-verify the enabler still holds every required role before acting — a role
+  // may have been revoked since automation was switched on.
+  const held = await tx.roleAssignment.findMany({
+    where: {
+      userId: enablerId,
+      workspaceId: input.workspaceId,
+      role: { in: [...stage.requiredApprovers] },
+    },
+    select: { role: true },
+  });
+  const heldRoles = new Set(held.map((h) => h.role));
+  if (stage.requiredApprovers.some((r) => !heldRoles.has(r))) {
+    return {
+      gateClosed: false,
+      attempted: false,
+      reason: "the human who enabled automation no longer holds every required role",
+    };
+  }
+
+  // Fill each required seat through the ordinary approval path. The last one
+  // completes quorum and closes the gate inside approveGate.
+  let result: ApproveGateResult = {
+    gateClosed: false,
+    missingRoles: [...stage.requiredApprovers],
+    vetoedBy: [],
+  };
+  for (const role of stage.requiredApprovers) {
+    result = await approveGate(tx, {
+      gateId: input.gateId,
+      actorId: enablerId,
+      actorRole: role,
+      workspaceId: input.workspaceId,
+      workspaceSlug: input.workspaceSlug,
+      productId: input.productId,
+      currentArtifactHash: input.currentArtifactHash,
+      artifactVersionId: input.artifactVersionId,
+      comment: "Automated approval — gate configured for auto-approval; exit criteria met.",
+    });
+  }
+
+  return { gateClosed: result.gateClosed, attempted: true };
 }
 
 export interface RecordReviewDecisionInput {

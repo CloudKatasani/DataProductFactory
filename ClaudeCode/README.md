@@ -44,6 +44,13 @@ non-negotiables in code and tests:
   hash under review. The Privacy/Security Officer holds a veto on stage 9.
 - **The single approval path**: `approveGate` is the only code that writes
   `APPROVED`; a source-scanning test fails if any other write site appears.
+- **Manual or automated gates**: each gate is `MANUAL` (a human approves) or
+  `AUTOMATED` (auto-approves the moment exit criteria pass). Automation is a
+  governed act — only a member holding *every* required approver role may enable
+  it, veto-role gates (Stage 9) can never be automated, and every auto-approval
+  is attributed to that human and still flows through the one `approveGate`
+  choke point. So both modes preserve "human-in-the-loop"; automation just
+  records the human's standing pre-approval instead of a click.
 - **Cascade invalidation**: editing an approved upstream artifact moves
   downstream gates `APPROVED → STALE` and records a re-approval reason.
 - **Provenance**: every artifact version records `AI_DRAFT` / `HUMAN_AUTHORED` /

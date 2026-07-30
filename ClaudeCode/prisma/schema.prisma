@@ -102,6 +102,15 @@ model Gate {
   stageNumber Int
   /// See GateStatus in src/lib/artifacts/enums.ts
   status      String   @default("NOT_STARTED")
+  /// See GateMode in src/lib/artifacts/enums.ts. MANUAL requires a human at the
+  /// gate; AUTOMATED auto-approves when exit criteria pass, on behalf of the
+  /// human who enabled it. Veto-role gates can never be AUTOMATED.
+  mode        String   @default("MANUAL")
+  /// The user who enabled automation — the accountable human on record for every
+  /// auto-approval. Null in MANUAL mode. No relation on purpose: this is a
+  /// reference for attribution, resolved by lookup, not a cascade participant.
+  automationById String?
+  automationAt   DateTime?
   /// Set when a cascade invalidates a previously approved gate. Retained so the
   /// re-approval task can explain which upstream edit caused the staleness.
   stalenessReason String?

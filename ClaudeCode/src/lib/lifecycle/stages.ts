@@ -1,3 +1,4 @@
+import { VETO_ROLES } from "@/lib/artifacts/enums";
 import {
   requiresArtifact,
   requiresCompleteDecisionRecord,
@@ -139,4 +140,14 @@ export function getStage(stageNumber: number): StageDefinition {
     );
   }
   return stage;
+}
+
+/**
+ * Whether a stage's gate may be set to AUTOMATED. A gate carrying a veto role
+ * (e.g. Stage 9's Privacy/Security Officer) always requires a human and can
+ * never auto-approve — that is the one seat the whole app exists to protect.
+ */
+export function stageAllowsAutomation(stageNumber: number): boolean {
+  const stage = getStage(stageNumber);
+  return !stage.requiredApprovers.some((role) => VETO_ROLES.includes(role));
 }
