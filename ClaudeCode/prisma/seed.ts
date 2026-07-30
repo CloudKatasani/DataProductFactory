@@ -11,6 +11,7 @@
 import { PrismaClient } from "@prisma/client";
 import { hashPassword } from "../src/lib/auth/password";
 import { STAGES } from "../src/lib/lifecycle/stages";
+import { canonicalize, contentHash } from "../src/lib/artifacts/hash";
 import type { Role } from "../src/lib/artifacts/enums";
 
 const prisma = new PrismaClient();
@@ -33,8 +34,8 @@ async function main(): Promise<void> {
 
   const workspace = await prisma.workspace.upsert({
     where: { slug: "demo" },
-    create: { slug: "demo", name: "Demo Workspace", industryPack: "_generic" },
-    update: {},
+    create: { slug: "demo", name: "Demo Workspace", industryPack: "utility" },
+    update: { industryPack: "utility" },
   });
 
   for (const person of PEOPLE) {
@@ -82,6 +83,37 @@ async function main(): Promise<void> {
         status: stage.number === 0 ? "APPROVED" : stage.number === 1 ? "DRAFT" : "NOT_STARTED",
       },
       update: {},
+    });
+  }
+
+  // Stage 0's committed workspace.yaml, so the pre-approved gate has the setup
+  // artifact behind it that the real creation flow produces. Author: the admin.
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: "admin@dpf.local" } });
+  const setupBody = {
+    workspaceSlug: workspace.slug,
+    workspaceName: workspace.name,
+    industryPack: workspace.industryPack,
+    productSlug: product.slug,
+    productName: product.name,
+  };
+  const existingSetup = await prisma.artifact.findUnique({
+    where: {
+      productId_kind_slug: { productId: product.id, kind: "WORKSPACE_SETUP", slug: "workspace" },
+    },
+  });
+  if (!existingSetup) {
+    const setupArtifact = await prisma.artifact.create({
+      data: { productId: product.id, stageNumber: 0, kind: "WORKSPACE_SETUP", slug: "workspace" },
+    });
+    await prisma.artifactVersion.create({
+      data: {
+        artifactId: setupArtifact.id,
+        versionNumber: 1,
+        contentJson: canonicalize(setupBody),
+        contentHash: contentHash(setupBody),
+        provenance: "HUMAN_AUTHORED",
+        authorId: admin.id,
+      },
     });
   }
 

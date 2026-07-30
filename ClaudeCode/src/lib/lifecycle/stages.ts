@@ -16,8 +16,10 @@ export const STAGES: readonly StageDefinition[] = [
   {
     number: 0,
     title: "Workspace & Pack Setup",
-    artifactKinds: [],
+    artifactKinds: ["WORKSPACE_SETUP"],
     requiredApprovers: ["PLATFORM_ADMIN"],
+    // No content criterion: setup is gated by the Platform Admin's approval of
+    // the committed workspace.yaml, not by a machine check on its fields.
     exitCriteria: [],
   },
   {

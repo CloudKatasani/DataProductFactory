@@ -1,6 +1,7 @@
 import type { ZodType } from "zod";
 import type { ArtifactKind } from "@/lib/artifacts/enums";
 import type { MirrorFormat } from "@/lib/artifacts/mirror";
+import { WorkspaceSetupBody } from "./workspace-setup";
 import { DecisionRegisterBody } from "./decision-register";
 import { CharterBody } from "./charter";
 
@@ -21,6 +22,11 @@ export interface ArtifactSchemaEntry {
 }
 
 const REGISTRY: Partial<Record<ArtifactKind, ArtifactSchemaEntry>> = {
+  WORKSPACE_SETUP: {
+    schema: WorkspaceSetupBody,
+    format: "yaml",
+    slug: "workspace",
+  },
   DECISION_REGISTER: {
     schema: DecisionRegisterBody,
     format: "yaml",
@@ -63,5 +69,6 @@ export function parseArtifactBody(kind: ArtifactKind, body: unknown): unknown {
   return getArtifactSchema(kind).schema.parse(body);
 }
 
+export { WorkspaceSetupBody } from "./workspace-setup";
 export { DecisionRegisterBody } from "./decision-register";
 export { CharterBody, renderCharterMarkdown } from "./charter";

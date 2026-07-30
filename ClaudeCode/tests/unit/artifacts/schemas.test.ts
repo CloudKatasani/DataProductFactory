@@ -74,9 +74,31 @@ describe("CHARTER body schema", () => {
 
 describe("artifact schema registry", () => {
   it("knows the kinds that have body schemas", () => {
+    expect(hasArtifactSchema("WORKSPACE_SETUP")).toBe(true);
     expect(hasArtifactSchema("DECISION_REGISTER")).toBe(true);
     expect(hasArtifactSchema("CHARTER")).toBe(true);
     expect(hasArtifactSchema("OPERATIONS_LOG")).toBe(false);
+  });
+
+  it("validates the workspace setup body and rejects a missing pack", () => {
+    expect(() =>
+      parseArtifactBody("WORKSPACE_SETUP", {
+        workspaceSlug: "demo",
+        workspaceName: "Demo",
+        industryPack: "utility",
+        productSlug: "p",
+        productName: "P",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      parseArtifactBody("WORKSPACE_SETUP", {
+        workspaceSlug: "demo",
+        workspaceName: "Demo",
+        industryPack: "",
+        productSlug: "p",
+        productName: "P",
+      }),
+    ).toThrow();
   });
 
   it("maps DECISION_REGISTER to a yaml mirror", () => {
