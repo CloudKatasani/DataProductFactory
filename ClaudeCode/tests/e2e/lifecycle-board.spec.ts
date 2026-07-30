@@ -56,9 +56,11 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
     .fill("Crews idle while customers stay dark");
   await page.getByRole("button", { name: "Add decision record" }).click();
 
-  // Commit the register; the artifact appears as human-authored.
+  // Commit the register; the artifact appears as human-authored. Match the
+  // artifact chip exactly — the exit-criteria checklist also mentions
+  // "DECISION_REGISTER committed at version 1", asserted separately below.
   await page.getByRole("button", { name: "Commit decision register" }).click();
-  await expect(page.getByText("DECISION_REGISTER")).toBeVisible();
+  await expect(page.getByText("DECISION_REGISTER", { exact: true })).toBeVisible();
   await expect(page.getByText("Human-authored")).toBeVisible();
   await expect(
     page.getByText("DECISION_REGISTER committed at version", { exact: false }),

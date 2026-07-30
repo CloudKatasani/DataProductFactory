@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { ZodError } from "zod";
 import { prisma } from "@/lib/db/client";
-import { ArtifactKind, Role } from "@/lib/artifacts/enums";
+import { ArtifactKind, GateMode, Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
 import { draftArtifact, AssistUnavailableError, type DraftContext } from "@/lib/ai/assist";
 import { getDraftModelClient } from "@/lib/ai/provider";
@@ -17,7 +17,13 @@ import {
   renderCharterMarkdown,
 } from "@/lib/artifacts/schemas";
 import { syncAttributes } from "@/lib/artifacts/attributes";
-import { approveGate, recordReviewDecision, setGateStatus } from "@/lib/governance/gates";
+import {
+  approveGate,
+  autoApproveGate,
+  recordReviewDecision,
+  setGateMode,
+  setGateStatus,
+} from "@/lib/governance/gates";
 import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
 import { assertCanEnterReview } from "@/lib/lifecycle/transition";
@@ -548,9 +554,65 @@ export async function enterReviewAction(
       }),
     );
 
+    // Automated gates approve themselves now that exit criteria have passed
+    // (assertCanEnterReview guaranteed it above). The auto-approval is attributed
+    // to the human who enabled automation and runs through the ordinary
+    // approveGate path. It is isolated in its own transaction and best-effort: if
+    // it cannot complete (e.g. that human lost a required role), the gate simply
+    // stays in review for a manual approver — the submit itself still succeeded.
+    if (gate.mode === "AUTOMATED") {
+      const version = await stagePrimaryVersion(productId, stageNumber);
+      if (version) {
+        try {
+          await prisma.$transaction((tx) =>
+            autoApproveGate(tx, {
+              gateId: gate.id,
+              workspaceId: ctx.workspaceId,
+              workspaceSlug: ctx.workspaceSlug,
+              productId,
+              currentArtifactHash: version.contentHash,
+              artifactVersionId: version.id,
+            }),
+          );
+        } catch {
+          // Left for manual review; the stage is already IN_REVIEW.
+        }
+      }
+    }
+
     revalidatePath(`${productPath(ctx)}/stage/${stageNumber}`);
     revalidatePath(productPath(ctx));
     revalidatePath("/review");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Switch a gate between MANUAL and AUTOMATED approval. The governance rules —
+ * no veto gates, and the actor must hold every required role — live in
+ * setGateMode; this action authenticates the actor and confirms workspace
+ * membership before delegating.
+ */
+export async function setGateModeAction(gateId: string, mode: string): Promise<ActionResult> {
+  try {
+    const parsedMode = GateMode.parse(mode);
+    const gate = await prisma.gate.findUniqueOrThrow({ where: { id: gateId } });
+    const { user, ctx } = await requireMembership(gate.productId);
+    await prisma.$transaction((tx) =>
+      setGateMode(tx, {
+        gateId,
+        mode: parsedMode,
+        actorId: user.id,
+        workspaceId: ctx.workspaceId,
+        workspaceSlug: ctx.workspaceSlug,
+        productId: gate.productId,
+      }),
+    );
+
+    revalidatePath(`${productPath(ctx)}/stage/${gate.stageNumber}`);
+    revalidatePath(productPath(ctx));
     return { ok: true };
   } catch (error) {
     return fail(error);

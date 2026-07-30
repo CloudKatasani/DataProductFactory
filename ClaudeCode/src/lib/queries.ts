@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db/client";
 import { listPackIds, loadAllPacks } from "@/lib/packs/loader";
-import type { ArtifactKind, GateStatus, Provenance, Role } from "@/lib/artifacts/enums";
-import { STAGES } from "@/lib/lifecycle/stages";
+import type { ArtifactKind, GateMode, GateStatus, Provenance, Role } from "@/lib/artifacts/enums";
+import { STAGES, stageAllowsAutomation } from "@/lib/lifecycle/stages";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
 import { evaluateStage, isStageUnlocked } from "@/lib/lifecycle/transition";
 import type { CriterionResult } from "@/lib/lifecycle/types";
@@ -18,6 +18,11 @@ export interface StageView {
   requiredApprovers: Role[];
   status: GateStatus;
   gateId: string | null;
+  mode: GateMode;
+  /** False for veto gates, which can never be automated. */
+  automatable: boolean;
+  /** Name of the human who enabled automation, when mode is AUTOMATED. */
+  automationByName: string | null;
   unlocked: boolean;
   blockingStage: number | null;
   ready: boolean;
@@ -129,7 +134,13 @@ export async function getProductView(
     loadGateStatusByStage(product.id),
     prisma.gate.findMany({
       where: { productId: product.id },
-      select: { id: true, stageNumber: true, status: true },
+      select: {
+        id: true,
+        stageNumber: true,
+        status: true,
+        mode: true,
+        automationById: true,
+      },
     }),
     prisma.artifact.findMany({
       where: { productId: product.id, archivedAt: null },
@@ -152,9 +163,17 @@ export async function getProductView(
 
   const gateByStage = new Map(gateRows.map((g) => [g.stageNumber, g]));
 
+  // Resolve the names of the humans who enabled automation, in one lookup.
+  const enablerIds = [...new Set(gateRows.map((g) => g.automationById).filter((id): id is string => !!id))];
+  const enablers = enablerIds.length
+    ? await prisma.user.findMany({ where: { id: { in: enablerIds } }, select: { id: true, name: true } })
+    : [];
+  const enablerName = new Map(enablers.map((u) => [u.id, u.name]));
+
   const stages: StageView[] = STAGES.map((stage) => {
     const gate = gateByStage.get(stage.number);
     const status = (gate?.status as GateStatus) ?? "NOT_STARTED";
+    const mode = (gate?.mode as GateMode) ?? "MANUAL";
     const lock = isStageUnlocked(stage.number, gateStatusByStage);
     const readiness = evaluateStage(stage.number, ctx);
     return {
@@ -163,6 +182,12 @@ export async function getProductView(
       requiredApprovers: [...stage.requiredApprovers],
       status,
       gateId: gate?.id ?? null,
+      mode,
+      automatable: stageAllowsAutomation(stage.number),
+      automationByName:
+        mode === "AUTOMATED" && gate?.automationById
+          ? (enablerName.get(gate.automationById) ?? null)
+          : null,
       unlocked: lock.unlocked,
       blockingStage: lock.unlocked ? null : lock.blockingStage,
       ready: readiness.ready,
