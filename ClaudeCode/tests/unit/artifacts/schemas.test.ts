@@ -3,6 +3,7 @@ import {
   DecisionRegisterBody,
   CharterBody,
   SourceInventoryBody,
+  LogicalModelBody,
   renderCharterMarkdown,
   getArtifactSchema,
   hasArtifactSchema,
@@ -99,6 +100,26 @@ describe("SOURCE_INVENTORY body schema", () => {
     const parsed = SourceInventoryBody.parse({ sources: [source] });
     expect(parsed.sources).toHaveLength(1);
     expect(parsed.gapLog).toBe("");
+  });
+});
+
+describe("LOGICAL_MODEL body schema", () => {
+  const valid = {
+    grainStatement: "One row per outage per service point.",
+    entities: [{ name: "Outage", grain: "One row per outage", description: "" }],
+    identityResolution: "Keyed by SCADA event id.",
+  };
+
+  it("requires grain, an entity, and identity resolution", () => {
+    expect(LogicalModelBody.safeParse({ ...valid, grainStatement: "" }).success).toBe(false);
+    expect(LogicalModelBody.safeParse({ ...valid, entities: [] }).success).toBe(false);
+    expect(LogicalModelBody.safeParse({ ...valid, identityResolution: "" }).success).toBe(false);
+  });
+
+  it("accepts a valid model and defaults bindings to empty", () => {
+    const parsed = LogicalModelBody.parse(valid);
+    expect(parsed.entities).toHaveLength(1);
+    expect(parsed.conformedBindings).toEqual([]);
   });
 });
 

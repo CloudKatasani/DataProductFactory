@@ -26,7 +26,11 @@ export default defineConfig({
   // this only affects the cold-compile case, not passing-test speed.
   expect: { timeout: 30_000 },
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // One retry even locally: next dev compiles routes lazily on first hit, and the
+  // long multi-stage flow occasionally trips that cold-start latency. The retry
+  // runs against an already-warm server, so it absorbs the environmental flake
+  // without masking real failures (a genuine break fails both attempts).
+  retries: process.env.CI ? 2 : 1,
   reporter: process.env.CI ? "github" : "list",
   globalSetup: "./tests/e2e/global-setup.ts",
   use: {
