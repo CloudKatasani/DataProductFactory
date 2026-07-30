@@ -16,6 +16,7 @@ import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
 import { assertCanEnterReview } from "@/lib/lifecycle/transition";
 import { STAGES } from "@/lib/lifecycle/stages";
+import { listPackIds } from "@/lib/packs/loader";
 import { requireRole, requireUser, rolesInWorkspace } from "@/lib/auth/session";
 
 /**
@@ -73,6 +74,10 @@ function productPath(ctx: ProductContext): string {
   return `/workspace/${ctx.workspaceSlug}/product/${ctx.productSlug}`;
 }
 
+export type CreateWorkspaceResult =
+  | { ok: true; workspaceSlug: string }
+  | { ok: false; error: string };
+
 export type CreateProductResult =
   | { ok: true; productSlug: string }
   | { ok: false; error: string };
@@ -83,6 +88,60 @@ function slugify(input: string): string {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Create a workspace. Self-serve: any signed-in user may create one and becomes
+ * its Platform Admin — there is no tenant above workspaces in this local-first
+ * tool. The industry pack is chosen at creation and must be a real pack under
+ * packs/ (Non-Negotiable 11 — behaviour is data, so the pack must exist).
+ */
+export async function createWorkspaceAction(input: {
+  name: string;
+  slug?: string;
+  industryPack: string;
+}): Promise<CreateWorkspaceResult> {
+  try {
+    const user = await requireUser();
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "A workspace needs a name." };
+    const slug = slugify(input.slug?.trim() || name);
+    if (!slug) return { ok: false, error: "Could not derive a URL slug from that name." };
+
+    const packs = await listPackIds();
+    if (!packs.includes(input.industryPack)) {
+      return { ok: false, error: `Unknown industry pack "${input.industryPack}".` };
+    }
+
+    const existing = await prisma.workspace.findUnique({ where: { slug } });
+    if (existing) {
+      return { ok: false, error: `A workspace with the slug "${slug}" already exists.` };
+    }
+
+    const workspace = await prisma.workspace.create({
+      data: {
+        slug,
+        name,
+        industryPack: input.industryPack,
+        // The creator becomes the workspace's Platform Admin.
+        assignments: { create: { userId: user.id, role: "PLATFORM_ADMIN" } },
+      },
+    });
+    await prisma.auditEvent.create({
+      data: {
+        workspaceId: workspace.id,
+        actorId: user.id,
+        type: "WORKSPACE_CREATED",
+        payloadJson: JSON.stringify({ slug, name, industryPack: input.industryPack }),
+      },
+    });
+
+    revalidatePath("/workspace");
+    return { ok: true, workspaceSlug: slug };
+  } catch (error) {
+    const r = fail(error);
+    return { ok: false, error: r.ok ? "" : r.error };
+  }
 }
 
 /**
