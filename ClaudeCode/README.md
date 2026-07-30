@@ -63,6 +63,13 @@ non-negotiables in code and tests:
   `DPF_LLM_API_KEY` set, the button reports assist is off and authoring stays
   fully manual (Non-Negotiables #3 and #6).
 
+- **Control-plane catalog**: each workspace opens on a card catalog of its data
+  products — classification (derived from the attribute register), archetype and
+  tier tags, attribute/source/contract-field counts, grain and the charter's
+  value hypothesis, all from committed state. An **Agent flow** view lays the
+  lifecycle out as phases, marking each stage's gate (human / veto / automatable)
+  and whether it has agent-assisted authoring.
+
 Stages 2–5 have full authoring UIs; stages 6–12 exist in the registry with gates
 and exit criteria, and their authoring UIs are the next slices.
 
@@ -75,10 +82,11 @@ Routes are workspace-scoped so a product slug is unambiguous across workspaces
 |-------|---------|
 | `/login` | Credentials sign-in |
 | `/workspace` | Workspace list |
-| `/workspace/[slug]` | Products in a workspace |
+| `/workspace/[slug]` | Control-plane catalog of the workspace's data products |
+| `/workspace/[slug]/agent-flow` | Lifecycle phase board (gates, automation, agent assist) |
 | `/workspace/[slug]/product/[productSlug]` | The 13-stage gate board |
 | `/workspace/[slug]/product/[productSlug]/stage/[n]` | Stage detail: author, commit, review, approve |
-| `/review` | Cross-product review queue |
+| `/review` | Cross-product review queue (Requests) |
 
 ## Verifying
 

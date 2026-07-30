@@ -270,6 +270,23 @@ test("any user creates a workspace and becomes its platform admin", async ({ pag
   await expect(page.getByRole("button", { name: "New product" })).toBeVisible();
 });
 
+test("the control plane shows the catalog and the agent-flow board", async ({ page }) => {
+  await signIn(page, "owner@dpf.local");
+  await page.goto("/workspace/demo");
+
+  // Catalog: the demo product appears as a card, and the sub-nav is present.
+  await expect(page.getByRole("heading", { name: "Data product catalog" })).toBeVisible();
+  await expect(page.getByText("Outage Response")).toBeVisible();
+
+  // Switch to the agent-flow board via the sub-nav.
+  await page.getByRole("link", { name: "Agent flow" }).click();
+  await page.waitForURL("**/workspace/demo/agent-flow");
+  await expect(page.getByRole("heading", { name: "Agent flow" })).toBeVisible();
+  // The lifecycle is laid out; a couple of stages render on the board.
+  await expect(page.getByRole("heading", { name: "Consumption Discovery" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Access, Security & Governance" })).toBeVisible();
+});
+
 test("a locked downstream stage has no navigable link", async ({ page }) => {
   // Self-contained so it stays correct as the demo product progresses through
   // more stages: create a fresh product whose Stage 0 is not yet approved, so

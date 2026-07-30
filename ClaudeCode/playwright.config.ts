@@ -18,8 +18,13 @@ export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: false,
   workers: 1,
-  // The gate flow signs several reviewers in and out across two stages.
-  timeout: 120_000,
+  // The consumption-first spec is a long mega-flow: it signs several reviewers
+  // in and out and drives stages 1 through 5, so `next dev` lazily compiles ~10
+  // routes within one test. On a loaded machine that cold-compile can stack up
+  // well past two minutes; give it generous headroom so it completes on the
+  // first attempt rather than timing out mid-flow and leaving shared state dirty
+  // for the retry. A genuine break still fails fast on an assertion.
+  timeout: 240_000,
   // next dev compiles routes lazily on first hit; deep in the multi-stage flow
   // those compilations can stack up, so give assertions generous room over the
   // 5s default. Assertions still resolve as soon as the condition is met, so
