@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { Check, X } from "lucide-react";
+import { Check, Download, X } from "lucide-react";
 import { AppHeader } from "@/components/app-header";
 import { GateStatusBadge, ProvenanceBadge } from "@/components/badges";
 import { ActionButton } from "@/components/action-button";
@@ -170,7 +170,23 @@ export default async function StagePage({
                 >
                   <span className="font-mono text-xs">{a.kind}</span>
                   <span className="text-[var(--muted)]">v{a.versionNumber}</span>
-                  <span className="ml-auto">
+                  <span className="ml-auto flex items-center gap-3">
+                    <span className="flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                      <Download size={12} aria-hidden />
+                      <a
+                        href={`/api/export/${a.versionId}?format=yaml`}
+                        className="underline decoration-dotted hover:text-foreground"
+                      >
+                        YAML
+                      </a>
+                      <span aria-hidden>·</span>
+                      <a
+                        href={`/api/export/${a.versionId}?format=json`}
+                        className="underline decoration-dotted hover:text-foreground"
+                      >
+                        JSON
+                      </a>
+                    </span>
                     <ProvenanceBadge provenance={a.provenance} />
                   </span>
                 </li>
