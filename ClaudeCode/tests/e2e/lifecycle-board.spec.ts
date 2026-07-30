@@ -177,6 +177,24 @@ test("a platform admin creates a product and approves its stage-0 setup", async 
   await expect(page.locator('a[href$="/stage/1"]')).toBeVisible();
 });
 
+test("any user creates a workspace and becomes its platform admin", async ({ page }) => {
+  // consumer@ holds no PLATFORM_ADMIN anywhere in the seed, yet self-serve
+  // workspace creation makes them admin of the one they create.
+  await signIn(page, "consumer@dpf.local");
+  await page.goto("/workspace");
+
+  await page.getByRole("button", { name: "New workspace" }).click();
+  await page.getByLabel("Workspace name").fill("Northeast Grid");
+  await page.getByLabel("Industry pack").selectOption("utility");
+  await page.getByRole("button", { name: "Create workspace" }).click();
+
+  await page.waitForURL("**/workspace/northeast-grid");
+  await expect(page.getByRole("heading", { name: "Northeast Grid" })).toBeVisible();
+  // The active pack renders, and the creator sees the admin-only New product control.
+  await expect(page.getByText("Utility (Electric & Gas)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "New product" })).toBeVisible();
+});
+
 test("a locked downstream stage has no navigable link", async ({ page }) => {
   // Stage 5's gate is locked because earlier gates are unapproved, so the board
   // renders it without a link to open it.

@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client";
+import { listPackIds, loadAllPacks } from "@/lib/packs/loader";
 import type { ArtifactKind, GateStatus, Provenance, Role } from "@/lib/artifacts/enums";
 import { STAGES } from "@/lib/lifecycle/stages";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
@@ -42,6 +43,19 @@ export interface ProductView {
     consequence: string;
     complete: boolean;
   }>;
+}
+
+/**
+ * Packs available to seed a new workspace, resilient to a single broken pack: if
+ * full validation fails, fall back to the directory names so the picker still
+ * works and the create action re-validates the chosen one.
+ */
+export async function listAvailablePacks(): Promise<Array<{ id: string; name: string }>> {
+  try {
+    return (await loadAllPacks()).map((p) => ({ id: p.id, name: p.name }));
+  } catch {
+    return (await listPackIds()).map((id) => ({ id, name: id }));
+  }
 }
 
 export async function listWorkspaces() {
