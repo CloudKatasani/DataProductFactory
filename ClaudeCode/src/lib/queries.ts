@@ -86,7 +86,15 @@ export async function getWorkspaceView(slug: string) {
     };
   });
 
-  return { workspace: { id: workspace.id, slug: workspace.slug, name: workspace.name }, products };
+  return {
+    workspace: {
+      id: workspace.id,
+      slug: workspace.slug,
+      name: workspace.name,
+      industryPack: workspace.industryPack,
+    },
+    products,
+  };
 }
 
 export async function getProductView(

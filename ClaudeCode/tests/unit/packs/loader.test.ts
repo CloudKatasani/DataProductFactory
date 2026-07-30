@@ -21,6 +21,20 @@ describe("pack loading", () => {
     expect(pack.conformedBackbone.map((e) => e.id)).toContain("party");
   });
 
+  it("loads the utility pack with its regulatory floor and reliability metrics", async () => {
+    const pack = await loadPack("utility");
+    expect(pack.id).toBe("utility");
+    expect(pack.conformedBackbone.map((e) => e.id)).toContain("outage-event");
+
+    // NERC CIP sets a classification floor no lower than CONFIDENTIAL.
+    const nerc = pack.regulatoryConstraints.find((c) => c.id === "nerc-cip");
+    expect(nerc?.minimumSensitivity).toBe("CONFIDENTIAL");
+
+    expect(pack.starterMetrics.map((m) => m.name)).toEqual(
+      expect.arrayContaining(["SAIDI", "SAIFI"]),
+    );
+  });
+
   it("reports a missing pack rather than returning undefined", async () => {
     await expect(loadPack("does-not-exist")).rejects.toThrow(/could not read or parse/);
   });

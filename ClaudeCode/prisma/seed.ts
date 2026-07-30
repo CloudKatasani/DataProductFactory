@@ -33,8 +33,8 @@ async function main(): Promise<void> {
 
   const workspace = await prisma.workspace.upsert({
     where: { slug: "demo" },
-    create: { slug: "demo", name: "Demo Workspace", industryPack: "_generic" },
-    update: {},
+    create: { slug: "demo", name: "Demo Workspace", industryPack: "utility" },
+    update: { industryPack: "utility" },
   });
 
   for (const person of PEOPLE) {

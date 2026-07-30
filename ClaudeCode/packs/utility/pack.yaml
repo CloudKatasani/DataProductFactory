@@ -1,0 +1,85 @@
+# Utility (electric & gas distribution) industry pack.
+#
+# Everything specific to regulated utilities lives here as data — domains, the
+# conformed backbone every product binds to, the regulatory floor for
+# classification, and starter metrics. Adding or changing utility behaviour is an
+# edit to this file, never to src/ (CLAUDE.md Non-Negotiable 11).
+
+id: utility
+name: Utility (Electric & Gas)
+version: 1.0.0
+description: >-
+  Regulated electric and gas distribution utilities. Carries a reliability-first
+  conformed backbone and the classification floors that critical-infrastructure
+  and customer-privacy rules impose.
+
+domains:
+  - id: grid-operations
+    name: Grid Operations
+    description: Real-time operation and switching of the distribution network.
+  - id: asset-management
+    name: Asset Management
+    description: Poles, transformers, feeders and meters across their lifecycle.
+  - id: field-service
+    name: Field Service
+    description: Crews, work orders and outage dispatch.
+  - id: customer
+    name: Customer
+    description: Service points, accounts, billing and usage.
+
+conformedBackbone:
+  - id: service-point
+    name: Service Point
+    grain: One row per metered service point (premise connection).
+    description: >-
+      The physical delivery point where the network meets a customer. The shared
+      spine for usage, outages and billing — products specialise it rather than
+      inventing a parallel premise entity.
+  - id: network-asset
+    name: Network Asset
+    grain: One row per network asset (transformer, feeder, pole, switch).
+    description: The physical grid inventory outages and maintenance attach to.
+  - id: outage-event
+    name: Outage Event
+    grain: One row per distinct outage event.
+    description: >-
+      A grid interruption from detection to restoration. Reliability metrics
+      (SAIDI, SAIFI) are defined against this grain.
+  - id: calendar
+    name: Calendar
+    grain: One row per calendar day.
+    description: Shared date dimension. Every time series conforms to this.
+
+regulatoryConstraints:
+  - id: nerc-cip
+    name: NERC CIP
+    minimumSensitivity: CONFIDENTIAL
+    note: >-
+      Critical Infrastructure Protection. Grid topology, asset locations and
+      operational control data must be classified no lower than CONFIDENTIAL.
+  - id: customer-pii
+    name: Customer PII
+    minimumSensitivity: RESTRICTED
+    note: >-
+      Names, service addresses and interval usage that identify a person are
+      RESTRICTED and require masking outside billing purposes.
+
+starterMetrics:
+  - id: saidi
+    name: SAIDI
+    definition: >-
+      System Average Interruption Duration Index — total customer-minutes of
+      sustained interruption in the period divided by customers served.
+    suggestedLineagePath: sem.reliability.saidi
+  - id: saifi
+    name: SAIFI
+    definition: >-
+      System Average Interruption Frequency Index — total sustained customer
+      interruptions in the period divided by customers served.
+    suggestedLineagePath: sem.reliability.saifi
+  - id: mean-time-to-restore
+    name: Mean Time to Restore
+    definition: >-
+      Average duration from outage start to restoration across outage events in
+      the period.
+    suggestedLineagePath: sem.outage.mttr
