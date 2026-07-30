@@ -12,6 +12,11 @@ export default defineConfig({
     include: ["tests/unit/**/*.test.ts", "tests/integration/**/*.test.ts"],
     // Playwright owns tests/e2e — vitest must not try to run it.
     exclude: ["tests/e2e/**", "node_modules/**"],
+    // Creates the throwaway test.db once from the live schema.
+    globalSetup: ["tests/integration/global-setup.ts"],
+    // Points DATABASE_URL / DPF_WORKSPACE_ROOT at throwaway locations before any
+    // server module (and the Prisma singleton) is imported.
+    setupFiles: ["tests/integration/setup.ts"],
   },
   resolve: {
     alias: {

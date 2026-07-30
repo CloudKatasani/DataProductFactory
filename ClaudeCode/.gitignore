@@ -1,0 +1,45 @@
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# testing
+/coverage
+/test-results
+/playwright-report
+/blob-report
+/playwright/.cache
+
+# database (local SQLite, never committed)
+*.db
+*.db-journal
+/prisma/dev.db*
+
+# env — secrets never in repo (Non-Negotiable #12)
+.env
+.env.local
+.env*.local
+
+# typescript build info (regenerated)
+*.tsbuildinfo
+
+# misc
+.DS_Store
+*.pem
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# e2e throwaway mirror root
+/e2e-workspace

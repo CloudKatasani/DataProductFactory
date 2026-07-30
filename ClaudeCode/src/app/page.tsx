@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { STAGES } from "@/lib/lifecycle/stages";
 
 /**
@@ -16,6 +17,20 @@ export default function Home() {
           Thirteen stages, each with a human approval gate. No stage advances without a
           recorded human decision.
         </p>
+        <div className="mt-4 flex gap-3 text-sm">
+          <Link
+            href="/workspace"
+            className="rounded-md bg-foreground px-3 py-1.5 font-medium text-background transition hover:opacity-90"
+          >
+            Open workspaces
+          </Link>
+          <Link
+            href="/review"
+            className="rounded-md border border-[var(--border)] px-3 py-1.5 transition hover:bg-[var(--surface)]"
+          >
+            Review queue
+          </Link>
+        </div>
       </header>
 
       <ol className="divide-y divide-[var(--border)] overflow-hidden rounded-lg border border-[var(--border)]">
