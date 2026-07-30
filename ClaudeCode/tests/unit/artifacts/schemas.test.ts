@@ -4,6 +4,8 @@ import {
   CharterBody,
   SourceInventoryBody,
   LogicalModelBody,
+  AttributeRegisterBody,
+  DataContractBody,
   renderCharterMarkdown,
   getArtifactSchema,
   hasArtifactSchema,
@@ -120,6 +122,62 @@ describe("LOGICAL_MODEL body schema", () => {
     const parsed = LogicalModelBody.parse(valid);
     expect(parsed.entities).toHaveLength(1);
     expect(parsed.conformedBindings).toEqual([]);
+  });
+});
+
+describe("ATTRIBUTE_REGISTER body schema", () => {
+  it("requires at least one attribute", () => {
+    expect(AttributeRegisterBody.safeParse({ attributes: [] }).success).toBe(false);
+  });
+
+  it("defaults sensitivity to null (unclassified) — the Stage 9 blocker", () => {
+    const parsed = AttributeRegisterBody.parse({
+      attributes: [{ name: "meter_id", dataType: "string" }],
+    });
+    expect(parsed.attributes[0]!.sensitivity).toBeNull();
+    expect(parsed.attributes[0]!.piiFlag).toBe(false);
+  });
+
+  it("accepts a valid classification", () => {
+    const parsed = AttributeRegisterBody.parse({
+      attributes: [{ name: "customer_ssn", dataType: "string", sensitivity: "RESTRICTED", piiFlag: true }],
+    });
+    expect(parsed.attributes[0]!.sensitivity).toBe("RESTRICTED");
+  });
+
+  it("rejects an invalid sensitivity", () => {
+    expect(
+      AttributeRegisterBody.safeParse({
+        attributes: [{ name: "x", dataType: "string", sensitivity: "SECRET" }],
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("DATA_CONTRACT body schema", () => {
+  const valid = {
+    version: "1.0.0",
+    fields: [{ name: "outage_id", type: "string" }],
+    sla: { freshness: "< 5 min" },
+    deprecationPolicy: "Breaking changes get a new major and 90 days notice.",
+  };
+
+  it("requires a semver version", () => {
+    expect(DataContractBody.safeParse({ ...valid, version: "1.0" }).success).toBe(false);
+  });
+
+  it("requires a field, a freshness SLA, and a deprecation policy", () => {
+    expect(DataContractBody.safeParse({ ...valid, fields: [] }).success).toBe(false);
+    expect(
+      DataContractBody.safeParse({ ...valid, sla: { freshness: "" } }).success,
+    ).toBe(false);
+    expect(DataContractBody.safeParse({ ...valid, deprecationPolicy: "" }).success).toBe(false);
+  });
+
+  it("defaults field.required to true and thresholds to empty", () => {
+    const parsed = DataContractBody.parse(valid);
+    expect(parsed.fields[0]!.required).toBe(true);
+    expect(parsed.qualityThresholds).toEqual([]);
   });
 });
 

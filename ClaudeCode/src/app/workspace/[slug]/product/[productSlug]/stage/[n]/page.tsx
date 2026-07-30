@@ -8,6 +8,8 @@ import { DecisionRecordsEditor } from "@/components/decision-records-editor";
 import { CharterEditor } from "@/components/charter-editor";
 import { SourceInventoryEditor } from "@/components/source-inventory-editor";
 import { LogicalModelEditor } from "@/components/logical-model-editor";
+import { AttributeRegisterEditor } from "@/components/attribute-register-editor";
+import { DataContractEditor } from "@/components/data-contract-editor";
 import { getCurrentUser, rolesInWorkspace } from "@/lib/auth/session";
 import { getProductView } from "@/lib/queries";
 import {
@@ -187,8 +189,36 @@ export default async function StagePage({
           </section>
         )}
 
+        {/* Stage-5 authoring: two artifacts. */}
+        {stage.number === 5 && isMember && (
+          <section className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Attribute register
+            </h2>
+            <div className="mt-3">
+              <AttributeRegisterEditor productId={view.product.id} />
+            </div>
+            <h2 className="mt-6 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Data contract
+            </h2>
+            <div className="mt-3">
+              <DataContractEditor productId={view.product.id} />
+            </div>
+            {PRE_REVIEW.has(stage.status) && (
+              <div className="mt-4">
+                <ActionButton
+                  action={enterReviewAction.bind(null, view.product.id, stage.number)}
+                  variant="primary"
+                >
+                  Submit for review
+                </ActionButton>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Stages whose authoring UI is not built yet — the gate is still live. */}
-        {isMember && stage.number > 4 && (
+        {isMember && stage.number > 5 && (
           <section className="mt-8">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
               Author

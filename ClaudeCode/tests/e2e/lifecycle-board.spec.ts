@@ -17,6 +17,7 @@ const STAGE1 = "/workspace/demo/product/outage-response/stage/1";
 const STAGE2 = "/workspace/demo/product/outage-response/stage/2";
 const STAGE3 = "/workspace/demo/product/outage-response/stage/3";
 const STAGE4 = "/workspace/demo/product/outage-response/stage/4";
+const STAGE5 = "/workspace/demo/product/outage-response/stage/5";
 const BOARD = "/workspace/demo/product/outage-response";
 
 async function signIn(page: Page, email: string) {
@@ -185,6 +186,46 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
 
   await page.goto(BOARD);
   await expect(page.locator('a[href$="/stage/5"]')).toBeVisible();
+
+  // --- Stage 5: two artifacts (attribute register + data contract), then three
+  // approvers — data steward, domain SME, product owner — close its gate. ---
+  await page.goto(STAGE5);
+  await page.getByLabel("Attribute 1 name").fill("outage_id");
+  await page.getByLabel("Attribute 1 type").fill("string");
+  await page.getByLabel("Attribute 1 sensitivity").selectOption("INTERNAL");
+  await page.getByRole("button", { name: "Commit attribute register" }).click();
+  await expect(page.getByText("Attribute register committed", { exact: false })).toBeVisible();
+
+  await page.getByLabel("Field 1 name").fill("outage_id");
+  await page.getByLabel("Field 1 type").fill("string");
+  await page.getByLabel("SLA freshness").fill("< 5 minutes behind source");
+  await page
+    .getByLabel("Deprecation policy")
+    .fill("Breaking changes get a new major and 90 days notice.");
+  await page.getByRole("button", { name: "Commit data contract" }).click();
+  await expect(page.getByText("Data contract committed", { exact: false })).toBeVisible();
+
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+
+  // Domain SME (still signed in) approves — steward and owner are still required.
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "steward@dpf.local");
+  await page.goto(STAGE5);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "owner@dpf.local");
+  await page.goto(STAGE5);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Approved")).toBeVisible();
+
+  await page.goto(BOARD);
+  await expect(page.locator('a[href$="/stage/6"]')).toBeVisible();
 });
 
 test("a platform admin creates a product and approves its stage-0 setup", async ({ page }) => {
