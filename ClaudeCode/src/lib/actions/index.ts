@@ -7,6 +7,7 @@ import { Role } from "@/lib/artifacts/enums";
 import { commitArtifact } from "@/lib/artifacts/commit";
 import {
   CharterBody,
+  LogicalModelBody,
   SourceInventoryBody,
   parseArtifactBody,
   renderCharterMarkdown,
@@ -409,6 +410,37 @@ export async function commitSourceInventoryAction(
     });
 
     revalidatePath(`${productPath(ctx)}/stage/3`);
+    revalidatePath(productPath(ctx));
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Stage 4. Validate and commit the logical-model.yaml. */
+export async function commitLogicalModelAction(
+  productId: string,
+  input: unknown,
+): Promise<ActionResult> {
+  try {
+    const { user, ctx } = await requireMembership(productId);
+    const body = LogicalModelBody.parse(input);
+
+    await commitArtifact({
+      workspaceId: ctx.workspaceId,
+      workspaceSlug: ctx.workspaceSlug,
+      productId: ctx.productId,
+      productSlug: ctx.productSlug,
+      stageNumber: 4,
+      kind: "LOGICAL_MODEL",
+      slug: "logical-model",
+      format: "yaml",
+      body,
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    revalidatePath(`${productPath(ctx)}/stage/4`);
     revalidatePath(productPath(ctx));
     return { ok: true };
   } catch (error) {

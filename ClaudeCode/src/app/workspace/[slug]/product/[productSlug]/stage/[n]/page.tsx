@@ -7,6 +7,7 @@ import { ActionButton } from "@/components/action-button";
 import { DecisionRecordsEditor } from "@/components/decision-records-editor";
 import { CharterEditor } from "@/components/charter-editor";
 import { SourceInventoryEditor } from "@/components/source-inventory-editor";
+import { LogicalModelEditor } from "@/components/logical-model-editor";
 import { getCurrentUser, rolesInWorkspace } from "@/lib/auth/session";
 import { getProductView } from "@/lib/queries";
 import {
@@ -164,8 +165,30 @@ export default async function StagePage({
           </section>
         )}
 
+        {/* Stage-4 authoring. */}
+        {stage.number === 4 && isMember && (
+          <section className="mt-8">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+              Conceptual &amp; logical model
+            </h2>
+            <div className="mt-3">
+              <LogicalModelEditor productId={view.product.id} />
+            </div>
+            {PRE_REVIEW.has(stage.status) && (
+              <div className="mt-4">
+                <ActionButton
+                  action={enterReviewAction.bind(null, view.product.id, stage.number)}
+                  variant="primary"
+                >
+                  Submit for review
+                </ActionButton>
+              </div>
+            )}
+          </section>
+        )}
+
         {/* Stages whose authoring UI is not built yet — the gate is still live. */}
-        {isMember && stage.number > 3 && (
+        {isMember && stage.number > 4 && (
           <section className="mt-8">
             <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
               Author

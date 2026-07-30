@@ -16,6 +16,7 @@ const PASSWORD = "dpf-local-dev";
 const STAGE1 = "/workspace/demo/product/outage-response/stage/1";
 const STAGE2 = "/workspace/demo/product/outage-response/stage/2";
 const STAGE3 = "/workspace/demo/product/outage-response/stage/3";
+const STAGE4 = "/workspace/demo/product/outage-response/stage/4";
 const BOARD = "/workspace/demo/product/outage-response";
 
 async function signIn(page: Page, email: string) {
@@ -153,6 +154,37 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
 
   await page.goto(BOARD);
   await expect(page.locator('a[href$="/stage/4"]')).toBeVisible();
+
+  // --- Stage 4: author the logical model (sme is a member), then the domain
+  // architect and domain SME close its gate; stage 5 unlocks. ---
+  await page.goto(STAGE4);
+  await page
+    .getByLabel("Grain statement (what one row means)")
+    .fill("One row per outage per affected service point.");
+  await page.getByLabel("Entity 1 name").fill("Outage");
+  await page.getByLabel("Entity 1 grain").fill("One row per outage");
+  await page
+    .getByLabel("Identity-resolution strategy")
+    .fill("Outages keyed by SCADA event id; service points by meter id.");
+  await page.getByRole("button", { name: "Commit logical model" }).click();
+  await expect(page.getByText("Logical model committed", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Submit for review" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "architect@dpf.local");
+  await page.goto(STAGE4);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("In review")).toBeVisible();
+  await signOut(page);
+
+  await signIn(page, "sme@dpf.local");
+  await page.goto(STAGE4);
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Approved")).toBeVisible();
+
+  await page.goto(BOARD);
+  await expect(page.locator('a[href$="/stage/5"]')).toBeVisible();
 });
 
 test("a platform admin creates a product and approves its stage-0 setup", async ({ page }) => {
@@ -196,10 +228,18 @@ test("any user creates a workspace and becomes its platform admin", async ({ pag
 });
 
 test("a locked downstream stage has no navigable link", async ({ page }) => {
-  // Stage 5's gate is locked because earlier gates are unapproved, so the board
-  // renders it without a link to open it.
-  await signIn(page, "owner@dpf.local");
-  await page.goto(BOARD);
-  await expect(page.getByText("Attribute Register & Data Contract")).toBeVisible();
-  await expect(page.locator('a[href$="/stage/5"]')).toHaveCount(0);
+  // Self-contained so it stays correct as the demo product progresses through
+  // more stages: create a fresh product whose Stage 0 is not yet approved, so
+  // Stage 1 is locked and the board renders it without a link.
+  await signIn(page, "admin@dpf.local");
+  await page.goto("/workspace/demo");
+  await page.getByRole("button", { name: "New product" }).click();
+  await page.getByLabel("Product name").fill("Locked Demo");
+  await page.getByRole("button", { name: "Create product" }).click();
+  await page.waitForURL("**/product/locked-demo/stage/0");
+
+  await page.goto("/workspace/demo/product/locked-demo");
+  await expect(page.getByText("Consumption Discovery")).toBeVisible();
+  // Stage 0 is IN_REVIEW (unapproved), so Stage 1 is locked — no link.
+  await expect(page.locator('a[href$="/stage/1"]')).toHaveCount(0);
 });

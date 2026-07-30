@@ -5,6 +5,7 @@ import { WorkspaceSetupBody } from "./workspace-setup";
 import { DecisionRegisterBody } from "./decision-register";
 import { CharterBody } from "./charter";
 import { SourceInventoryBody } from "./source-inventory";
+import { LogicalModelBody } from "./logical-model";
 
 /**
  * The artifact schema registry. `commitArtifact` trusts its caller to have
@@ -45,6 +46,11 @@ const REGISTRY: Partial<Record<ArtifactKind, ArtifactSchemaEntry>> = {
     format: "yaml",
     slug: "source-inventory",
   },
+  LOGICAL_MODEL: {
+    schema: LogicalModelBody,
+    format: "yaml",
+    slug: "logical-model",
+  },
 };
 
 export class UnknownArtifactSchemaError extends Error {
@@ -79,3 +85,4 @@ export { WorkspaceSetupBody } from "./workspace-setup";
 export { DecisionRegisterBody } from "./decision-register";
 export { CharterBody, renderCharterMarkdown } from "./charter";
 export { SourceInventoryBody } from "./source-inventory";
+export { LogicalModelBody } from "./logical-model";
