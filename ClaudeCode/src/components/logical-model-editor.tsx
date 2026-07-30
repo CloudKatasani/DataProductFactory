@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { commitLogicalModelAction } from "@/lib/actions";
+import { AiDraftButton, AiDraftBanner } from "@/components/ai-draft";
 
 /**
  * Stage-4 authoring: the conceptual & logical model. Grain and identity
@@ -28,7 +29,31 @@ export function LogicalModelEditor({ productId }: { productId: string }) {
   const [bindings, setBindings] = useState<BindingRow[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [aiDrafted, setAiDrafted] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{
+      grainStatement: string;
+      identityResolution: string;
+      entities: EntityRow[];
+      conformedBindings: BindingRow[];
+    }>;
+    if (typeof d.grainStatement === "string") setGrainStatement(d.grainStatement);
+    if (typeof d.identityResolution === "string") setIdentityResolution(d.identityResolution);
+    if (d.entities?.length) {
+      setEntities(
+        d.entities.map((e) => ({
+          name: e.name ?? "",
+          grain: e.grain ?? "",
+          description: e.description ?? "",
+        })),
+      );
+    }
+    if (d.conformedBindings?.length) setBindings(d.conformedBindings);
+    setDone(false);
+    setAiDrafted(true);
+  }
 
   const validEntities = entities.filter((e) => e.name.trim() && e.grain.trim());
   const canCommit =
@@ -52,7 +77,12 @@ export function LogicalModelEditor({ productId }: { productId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4">
+    <div
+      className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4"
+      onChange={() => aiDrafted && setAiDrafted(false)}
+    >
+      <AiDraftButton productId={productId} kind="LOGICAL_MODEL" onDraft={applyDraft} />
+      {aiDrafted && <AiDraftBanner />}
       <label className="flex flex-col gap-1 text-sm">
         <span className="text-[var(--muted)]">Grain statement (what one row means)</span>
         <textarea

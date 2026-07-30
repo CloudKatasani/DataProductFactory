@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { commitCharterAction } from "@/lib/actions";
+import { AiDraftButton, AiDraftBanner } from "@/components/ai-draft";
 
 /**
  * Stage-2 authoring: the product charter. Authored as a structured shape and
@@ -37,7 +38,27 @@ export function CharterEditor({
   const [measures, setMeasures] = useState<Measure[]>([{ measure: "", target: "" }]);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [aiDrafted, setAiDrafted] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{
+      productName: string;
+      archetype: string;
+      tier: string;
+      scopeBoundary: string;
+      valueHypothesis: string;
+      successMeasures: Measure[];
+    }>;
+    if (d.productName) setProductName(d.productName);
+    if (d.archetype) setArchetype(d.archetype);
+    if (d.tier) setTier(d.tier);
+    if (typeof d.scopeBoundary === "string") setScopeBoundary(d.scopeBoundary);
+    if (typeof d.valueHypothesis === "string") setValueHypothesis(d.valueHypothesis);
+    if (d.successMeasures?.length) setMeasures(d.successMeasures);
+    setDone(false);
+    setAiDrafted(true);
+  }
 
   const validMeasures = measures.filter((m) => m.measure.trim() && m.target.trim());
   const canCommit =
@@ -64,7 +85,12 @@ export function CharterEditor({
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4">
+    <div
+      className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4"
+      onChange={() => aiDrafted && setAiDrafted(false)}
+    >
+      <AiDraftButton productId={productId} kind="CHARTER" onDraft={applyDraft} />
+      {aiDrafted && <AiDraftBanner />}
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1 text-sm sm:col-span-2">
           <span className="text-[var(--muted)]">Product name</span>

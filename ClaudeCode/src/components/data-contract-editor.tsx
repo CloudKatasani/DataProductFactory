@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { commitDataContractAction } from "@/lib/actions";
+import { AiDraftButton, AiDraftBanner } from "@/components/ai-draft";
 
 /**
  * Stage-5 authoring: the data contract. Version and deprecation policy are
@@ -28,7 +29,34 @@ export function DataContractEditor({ productId }: { productId: string }) {
   const [deprecationPolicy, setDeprecationPolicy] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [aiDrafted, setAiDrafted] = useState(false);
   const [pending, startTransition] = useTransition();
+
+  function applyDraft(draft: unknown) {
+    const d = draft as Partial<{
+      version: string;
+      fields: FieldRow[];
+      sla: { freshness?: string; availability?: string };
+      qualityThresholds: ThresholdRow[];
+      deprecationPolicy: string;
+    }>;
+    if (d.version) setVersion(d.version);
+    if (d.fields?.length) {
+      setFields(
+        d.fields.map((f) => ({
+          name: f.name ?? "",
+          type: f.type ?? "",
+          required: f.required ?? true,
+        })),
+      );
+    }
+    if (d.sla?.freshness !== undefined) setFreshness(d.sla.freshness);
+    if (d.sla?.availability !== undefined) setAvailability(d.sla.availability);
+    if (d.qualityThresholds?.length) setThresholds(d.qualityThresholds);
+    if (typeof d.deprecationPolicy === "string") setDeprecationPolicy(d.deprecationPolicy);
+    setDone(false);
+    setAiDrafted(true);
+  }
 
   const validFields = fields.filter((f) => f.name.trim() && f.type.trim());
   const canCommit = version.trim() && freshness.trim() && deprecationPolicy.trim() && validFields.length > 0;
@@ -50,7 +78,12 @@ export function DataContractEditor({ productId }: { productId: string }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4">
+    <div
+      className="flex flex-col gap-4 rounded-md border border-[var(--border)] p-4"
+      onChange={() => aiDrafted && setAiDrafted(false)}
+    >
+      <AiDraftButton productId={productId} kind="DATA_CONTRACT" onDraft={applyDraft} />
+      {aiDrafted && <AiDraftBanner />}
       <label className="flex flex-col gap-1 text-sm sm:max-w-40">
         <span className="text-[var(--muted)]">Version (semver)</span>
         <input

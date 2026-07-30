@@ -48,9 +48,16 @@ non-negotiables in code and tests:
   downstream gates `APPROVED → STALE` and records a re-approval reason.
 - **Provenance**: every artifact version records `AI_DRAFT` / `HUMAN_AUTHORED` /
   `HUMAN_REVIEWED`, shown as a badge. The assistant can never approve anything.
+- **Draft with agent** (optional, propose-only): each stage editor has a
+  "Draft with agent" action that asks Claude for a schema-valid draft, validated
+  against the same Zod schema manual authoring uses. The draft lands in the
+  editor marked as an agent draft; a human reviews, edits, and commits it as
+  their own work — nothing is persisted or approved by the agent. With no
+  `DPF_LLM_API_KEY` set, the button reports assist is off and authoring stays
+  fully manual (Non-Negotiables #3 and #6).
 
-Stages 2–12 exist in the registry with gates and exit criteria; their authoring
-UIs are the next slices.
+Stages 2–5 have full authoring UIs; stages 6–12 exist in the registry with gates
+and exit criteria, and their authoring UIs are the next slices.
 
 ## Routes
 
