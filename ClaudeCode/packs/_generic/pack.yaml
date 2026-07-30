@@ -1,0 +1,46 @@
+# The industry-agnostic baseline. Every workspace starts here; an industry pack
+# replaces it rather than layering on top, so that what a workspace is running is
+# always one named, versioned file.
+#
+# Adding an industry means adding packs/<id>/pack.yaml. It never means editing
+# TypeScript (CLAUDE.md non-negotiable 11).
+
+id: _generic
+name: Generic
+version: 1.0.0
+description: >-
+  Industry-neutral starting point. Carries no regulatory constraints and no
+  conformed backbone, so nothing here presumes what the business does.
+
+domains:
+  - id: customer
+    name: Customer
+    description: Parties the organisation serves.
+  - id: operations
+    name: Operations
+    description: How work gets done and what it costs.
+  - id: finance
+    name: Finance
+    description: Revenue, cost and margin.
+
+conformedBackbone:
+  - id: party
+    name: Party
+    grain: One row per party (person or organisation).
+    description: >-
+      The shared identity spine. Industry packs specialise this into customer,
+      member, subscriber or citizen rather than introducing a parallel entity.
+  - id: calendar
+    name: Calendar
+    grain: One row per calendar day.
+    description: Shared date dimension. Every time series conforms to this.
+
+regulatoryConstraints: []
+
+starterMetrics:
+  - id: active-parties
+    name: Active Parties
+    definition: >-
+      Count of distinct parties with at least one qualifying interaction in the
+      period. "Qualifying" must be defined by the domain before certification.
+    suggestedLineagePath: sem.party.active_count

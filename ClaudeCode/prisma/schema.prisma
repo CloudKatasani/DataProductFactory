@@ -1,0 +1,280 @@
+// DPF domain model.
+//
+// Two schema-wide rules, both from CLAUDE.md section 2:
+//   * There are no hard deletes. Every entity that can leave circulation carries
+//     `archivedAt`. AuditEvent, Approval and ArtifactVersion have no archive
+//     field at all — they are append-only and never leave.
+//   * Enums are modelled as String, not Prisma `enum`. SQLite has no native enum
+//     type, and the schema must be byte-identical across SQLite and Postgres.
+//     The authoritative value sets are the Zod enums in src/lib/artifacts/enums.ts,
+//     which is what every write path validates against.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Workspace, identity, roles
+// ---------------------------------------------------------------------------
+
+model Workspace {
+  id            String    @id @default(cuid())
+  slug          String    @unique
+  name          String
+  /// Pack id from packs/<id>/pack.yaml. Industry behaviour is data, never code.
+  industryPack  String    @default("_generic")
+  createdAt     DateTime  @default(now())
+  archivedAt    DateTime?
+
+  products      Product[]
+  assignments   RoleAssignment[]
+  metrics       Metric[]
+  auditEvents   AuditEvent[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  createdAt    DateTime  @default(now())
+  archivedAt   DateTime?
+
+  assignments      RoleAssignment[]
+  approvals        Approval[]
+  authoredVersions ArtifactVersion[]
+  auditEvents      AuditEvent[]
+  ownedMetrics     Metric[]
+}
+
+/// A user holds a role *within a workspace*. Authorization is always resolved
+/// server-side from this table; a client-supplied role is never trusted.
+model RoleAssignment {
+  id          String   @id @default(cuid())
+  userId      String
+  workspaceId String
+  /// See Role in src/lib/artifacts/enums.ts
+  role        String
+  createdAt   DateTime @default(now())
+
+  user      User      @relation(fields: [userId], references: [id])
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+
+  @@unique([userId, workspaceId, role])
+  @@index([workspaceId, role])
+}
+
+// ---------------------------------------------------------------------------
+// Product and lifecycle
+// ---------------------------------------------------------------------------
+
+model Product {
+  id          String    @id @default(cuid())
+  workspaceId String
+  slug        String
+  name        String
+  /// Archetype and tier are set at stage 2 and are null until the charter exists.
+  archetype   String?
+  tier        String?
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  workspace        Workspace        @relation(fields: [workspaceId], references: [id])
+  gates            Gate[]
+  artifacts        Artifact[]
+  decisionRecords  DecisionRecord[]
+  attributes       Attribute[]
+  auditEvents      AuditEvent[]
+
+  @@unique([workspaceId, slug])
+}
+
+/// One gate per stage per product. The gate — not the product — is the unit of
+/// approval, and stage N+1 is locked until stage N's gate is APPROVED.
+model Gate {
+  id          String   @id @default(cuid())
+  productId   String
+  stageNumber Int
+  /// See GateStatus in src/lib/artifacts/enums.ts
+  status      String   @default("NOT_STARTED")
+  /// Set when a cascade invalidates a previously approved gate. Retained so the
+  /// re-approval task can explain which upstream edit caused the staleness.
+  stalenessReason String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product   Product    @relation(fields: [productId], references: [id])
+  approvals Approval[]
+
+  @@unique([productId, stageNumber])
+  @@index([productId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Artifacts and versions
+// ---------------------------------------------------------------------------
+
+model Artifact {
+  id          String    @id @default(cuid())
+  productId   String
+  stageNumber Int
+  /// See ArtifactKind in src/lib/artifacts/enums.ts
+  kind        String
+  /// Stable identity within a product, e.g. "charter" or "data-contract".
+  slug        String
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  product  Product           @relation(fields: [productId], references: [id])
+  versions ArtifactVersion[]
+
+  @@unique([productId, kind, slug])
+  @@index([productId, stageNumber])
+}
+
+/// Immutable. A version is written once and never updated — corrections are a
+/// new version. `contentHash` is the SHA-256 of the canonical JSON serialization
+/// and is what an Approval binds itself to.
+model ArtifactVersion {
+  id            String   @id @default(cuid())
+  artifactId    String
+  versionNumber Int
+  /// Canonical JSON of the artifact body, validated against its Zod schema.
+  contentJson   String
+  contentHash   String
+  /// See Provenance in src/lib/artifacts/enums.ts. AI output always lands as
+  /// AI_DRAFT and can only be promoted by an explicit human action.
+  provenance    String
+  /// Null only for AI-generated drafts with no human author yet.
+  authorId      String?
+  /// Path this version was mirrored to under the workspace root.
+  mirrorPath    String?
+  createdAt     DateTime @default(now())
+
+  artifact  Artifact   @relation(fields: [artifactId], references: [id])
+  author    User?      @relation(fields: [authorId], references: [id])
+  approvals Approval[]
+
+  @@unique([artifactId, versionNumber])
+  @@index([contentHash])
+}
+
+// ---------------------------------------------------------------------------
+// Governance: approvals and audit (both append-only)
+// ---------------------------------------------------------------------------
+
+/// Append-only. An approval names the actor, the role they acted in, and the
+/// exact artifact version hash they saw. Changing your mind is a new row.
+model Approval {
+  id                String   @id @default(cuid())
+  gateId            String
+  artifactVersionId String
+  actorId           String
+  /// Role the actor exercised. Must be one they actually hold in the workspace.
+  role              String
+  /// See ApprovalDecision in src/lib/artifacts/enums.ts
+  decision          String
+  /// Hash copied at decision time so the record survives independently.
+  artifactHash      String
+  comment           String?
+  createdAt         DateTime @default(now())
+
+  gate            Gate            @relation(fields: [gateId], references: [id])
+  artifactVersion ArtifactVersion @relation(fields: [artifactVersionId], references: [id])
+  actor           User            @relation(fields: [actorId], references: [id])
+
+  @@index([gateId, createdAt])
+}
+
+/// Insert-only. Never updated, never deleted, no archivedAt.
+model AuditEvent {
+  id          String   @id @default(cuid())
+  workspaceId String
+  productId   String?
+  actorId     String?
+  /// See AuditEventType in src/lib/artifacts/enums.ts
+  type        String
+  /// JSON blob. Shape varies by type and is not schema-enforced here on purpose:
+  /// the audit log must be able to record events whose schema has since changed.
+  payloadJson String
+  createdAt   DateTime @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  product   Product?  @relation(fields: [productId], references: [id])
+  actor     User?     @relation(fields: [actorId], references: [id])
+
+  @@index([workspaceId, createdAt])
+  @@index([productId, createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// Stage-specific domain entities
+// ---------------------------------------------------------------------------
+
+/// Stage 1. Non-negotiable 1: stage 2 is hard-blocked until at least one of
+/// these exists with all four fields populated.
+model DecisionRecord {
+  id          String    @id @default(cuid())
+  productId   String
+  /// The named human who cannot make this decision today.
+  persona     String
+  /// The decision itself, stated as a decision and not as a report request.
+  decision    String
+  /// How often it must be made, e.g. "daily", "per outage".
+  cadence     String
+  /// What goes wrong when it is not made.
+  consequence String
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId])
+}
+
+/// Stage 5. Non-negotiable 10: stage 9 cannot gate until every row here has a
+/// non-null sensitivity.
+model Attribute {
+  id          String    @id @default(cuid())
+  productId   String
+  name        String
+  dataType    String
+  /// See Sensitivity in src/lib/artifacts/enums.ts. Null means unclassified,
+  /// which is exactly what blocks stage 9.
+  sensitivity String?
+  piiFlag     Boolean   @default(false)
+  /// Comma-separated regulatory tags, e.g. "GDPR,HIPAA". Empty when none apply.
+  regulatoryFlags String @default("")
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@unique([productId, name])
+  @@index([productId])
+}
+
+/// Stage 6. Non-negotiable 8: one metric, one definition, unique per workspace.
+model Metric {
+  id          String    @id @default(cuid())
+  workspaceId String
+  name        String
+  definition  String
+  ownerId     String
+  /// Dotted path through the semantic layer, e.g. "sem.outage.duration_minutes".
+  lineagePath String
+  certified   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  archivedAt  DateTime?
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id])
+  owner     User      @relation(fields: [ownerId], references: [id])
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+}

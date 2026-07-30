@@ -1,0 +1,28 @@
+# Optional. DPF runs on SQLite with no containers at all; this file exists only
+# for the multi-user Postgres path described in CLAUDE.md section 4.
+#
+#   docker compose up -d
+#   # then set DATABASE_URL=postgresql://dpf:dpf@localhost:5432/dpf?schema=public
+#   # and change prisma/schema.prisma datasource provider to "postgresql"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: dpf-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: dpf
+      POSTGRES_PASSWORD: dpf
+      POSTGRES_DB: dpf
+    ports:
+      - "5432:5432"
+    volumes:
+      - dpf-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dpf -d dpf"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  dpf-pgdata:
