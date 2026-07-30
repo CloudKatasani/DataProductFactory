@@ -27,11 +27,15 @@ Sign in with any seeded user — `owner@dpf.local`, `consumer@dpf.local`,
 `architect@dpf.local`, `steward@dpf.local`, `privacy@dpf.local`, … — all sharing
 the dev password `dpf-local-dev`.
 
-## What works today (stage-1 vertical slice)
+## What works today
 
 The consumption-first loop is implemented end-to-end and enforces the
 non-negotiables in code and tests:
 
+- **Stage 0 — Workspace & Pack Setup**: a Platform Admin creates a product,
+  which commits a `WORKSPACE_SETUP` (`workspace.yaml`) artifact and opens Stage 0
+  for review. Approving it — through the ordinary gate, never a back door —
+  unlocks Stage 1. Each workspace surfaces its active industry pack.
 - **Stage 1 — Consumption Discovery**: author blocked decisions (persona,
   decision, cadence, consequence), commit a versioned, hashed, file-mirrored
   `DECISION_REGISTER`, watch the exit-criteria checklist, and submit for review.

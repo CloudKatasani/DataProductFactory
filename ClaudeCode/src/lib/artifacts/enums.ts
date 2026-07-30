@@ -50,6 +50,7 @@ export const Sensitivity = z.enum(["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRI
 export type Sensitivity = z.infer<typeof Sensitivity>;
 
 export const ArtifactKind = z.enum([
+  "WORKSPACE_SETUP",
   "DECISION_REGISTER",
   "CHARTER",
   "SOURCE_INVENTORY",

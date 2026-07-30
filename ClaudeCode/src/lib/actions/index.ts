@@ -10,7 +10,8 @@ import { approveGate, recordReviewDecision, setGateStatus } from "@/lib/governan
 import { GovernanceError } from "@/lib/governance/errors";
 import { buildEvaluationContext, loadGateStatusByStage } from "@/lib/lifecycle/context";
 import { assertCanEnterReview } from "@/lib/lifecycle/transition";
-import { requireUser, rolesInWorkspace } from "@/lib/auth/session";
+import { STAGES } from "@/lib/lifecycle/stages";
+import { requireRole, requireUser, rolesInWorkspace } from "@/lib/auth/session";
 
 /**
  * Server actions: the only mutation surface the UI has. Each one authenticates
@@ -65,6 +66,121 @@ async function requireMembership(productId: string) {
 
 function productPath(ctx: ProductContext): string {
   return `/workspace/${ctx.workspaceSlug}/product/${ctx.productSlug}`;
+}
+
+export type CreateProductResult =
+  | { ok: true; productSlug: string }
+  | { ok: false; error: string };
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+/**
+ * Create a product inside a workspace. Platform-Admin-only: this is the Stage 0
+ * setup act. It creates the product and its full gate row set, commits the
+ * workspace.yaml (WORKSPACE_SETUP) artifact, and opens Stage 0 for review — so
+ * the admin then approves Stage 0 through the ordinary gate, which unlocks
+ * Stage 1. Nothing here writes APPROVED; the approval stays a recorded human
+ * action through approveGate.
+ */
+export async function createProductAction(
+  workspaceSlug: string,
+  input: { name: string; slug?: string },
+): Promise<CreateProductResult> {
+  try {
+    const user = await requireUser();
+    const workspace = await prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
+    if (!workspace || workspace.archivedAt) {
+      return { ok: false, error: "That workspace no longer exists." };
+    }
+    // Product creation is the Stage 0 setup act, reserved for the Platform Admin.
+    await requireRole(user.id, workspace.id, workspace.slug, "PLATFORM_ADMIN");
+
+    const name = input.name.trim();
+    if (!name) return { ok: false, error: "A product needs a name." };
+    const slug = slugify(input.slug?.trim() || name);
+    if (!slug) {
+      return { ok: false, error: "Could not derive a URL slug from that name." };
+    }
+
+    const existing = await prisma.product.findUnique({
+      where: { workspaceId_slug: { workspaceId: workspace.id, slug } },
+    });
+    if (existing) {
+      return { ok: false, error: `A product with the slug "${slug}" already exists here.` };
+    }
+
+    const product = await prisma.product.create({
+      data: {
+        workspaceId: workspace.id,
+        slug,
+        name,
+        gates: {
+          create: STAGES.map((stage) => ({
+            stageNumber: stage.number,
+            // Stage 0 opens for setup; Stage 1 is authorable once Stage 0 closes.
+            status: stage.number <= 1 ? "DRAFT" : "NOT_STARTED",
+          })),
+        },
+      },
+    });
+
+    await prisma.auditEvent.create({
+      data: {
+        workspaceId: workspace.id,
+        productId: product.id,
+        actorId: user.id,
+        type: "PRODUCT_CREATED",
+        payloadJson: JSON.stringify({ productSlug: slug, productName: name }),
+      },
+    });
+
+    const body = parseArtifactBody("WORKSPACE_SETUP", {
+      workspaceSlug: workspace.slug,
+      workspaceName: workspace.name,
+      industryPack: workspace.industryPack,
+      productSlug: slug,
+      productName: name,
+    });
+    await commitArtifact({
+      workspaceId: workspace.id,
+      workspaceSlug: workspace.slug,
+      productId: product.id,
+      productSlug: slug,
+      stageNumber: 0,
+      kind: "WORKSPACE_SETUP",
+      slug: "workspace",
+      format: "yaml",
+      body,
+      provenance: "HUMAN_AUTHORED",
+      authorId: user.id,
+    });
+
+    // Open Stage 0 for the Platform Admin's approval.
+    const gate0 = await prisma.gate.findUniqueOrThrow({
+      where: { productId_stageNumber: { productId: product.id, stageNumber: 0 } },
+    });
+    await prisma.$transaction((tx) =>
+      setGateStatus(tx, {
+        gateId: gate0.id,
+        to: "IN_REVIEW",
+        actorId: user.id,
+        workspaceId: workspace.id,
+        productId: product.id,
+      }),
+    );
+
+    revalidatePath(`/workspace/${workspace.slug}`);
+    return { ok: true, productSlug: slug };
+  } catch (error) {
+    const r = fail(error);
+    return { ok: false, error: r.ok ? "" : r.error };
+  }
 }
 
 export async function addDecisionRecordAction(

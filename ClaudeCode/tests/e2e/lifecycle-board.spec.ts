@@ -114,6 +114,28 @@ test("consumption-first: author, commit, review, and close the stage-1 gate", as
   await expect(page.locator('a[href$="/stage/3"]')).toBeVisible();
 });
 
+test("a platform admin creates a product and approves its stage-0 setup", async ({ page }) => {
+  await signIn(page, "admin@dpf.local");
+  await page.goto("/workspace/demo");
+
+  // Create a new product; lands on its Stage 0 with the setup artifact committed.
+  await page.getByRole("button", { name: "New product" }).click();
+  await page.getByLabel("Product name").fill("Grid Reliability");
+  await page.getByRole("button", { name: "Create product" }).click();
+  await page.waitForURL("**/product/grid-reliability/stage/0");
+
+  await expect(page.getByRole("heading", { name: "Workspace & Pack Setup" })).toBeVisible();
+  await expect(page.getByText("WORKSPACE_SETUP")).toBeVisible();
+  await expect(page.getByText("In review")).toBeVisible();
+
+  // The admin approves Stage 0 through the ordinary gate; Stage 1 then unlocks.
+  await page.getByRole("button", { name: "Approve" }).click();
+  await expect(page.getByText("Approved")).toBeVisible();
+
+  await page.goto("/workspace/demo/product/grid-reliability");
+  await expect(page.locator('a[href$="/stage/1"]')).toBeVisible();
+});
+
 test("a locked downstream stage has no navigable link", async ({ page }) => {
   // Stage 5's gate is locked because earlier gates are unapproved, so the board
   // renders it without a link to open it.

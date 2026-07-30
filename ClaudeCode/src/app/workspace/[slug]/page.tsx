@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { AppHeader } from "@/components/app-header";
 import { PackPanel } from "@/components/pack-panel";
-import { getCurrentUser } from "@/lib/auth/session";
+import { NewProduct } from "@/components/new-product";
+import { getCurrentUser, rolesInWorkspace } from "@/lib/auth/session";
 import { getWorkspaceView } from "@/lib/queries";
 import { STAGES } from "@/lib/lifecycle/stages";
 import { loadPack } from "@/lib/packs/loader";
@@ -19,6 +20,8 @@ export default async function WorkspacePage({
   const { slug } = await params;
   const view = await getWorkspaceView(slug);
   if (!view) notFound();
+
+  const isAdmin = (await rolesInWorkspace(user.id, view.workspace.id)).includes("PLATFORM_ADMIN");
 
   // Load the workspace's active pack. A pack that fails validation must not take
   // the whole page down — the workspace still works, so degrade to a note.
@@ -54,9 +57,12 @@ export default async function WorkspacePage({
           )}
         </div>
 
-        <h2 className="mt-8 text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
-          Products
-        </h2>
+        <div className="mt-8 flex items-center justify-between">
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-[var(--muted)]">
+            Products
+          </h2>
+          {isAdmin && <NewProduct workspaceSlug={view.workspace.slug} />}
+        </div>
 
         {view.products.length === 0 ? (
           <p className="mt-8 text-sm text-[var(--muted)]">No products in this workspace yet.</p>
